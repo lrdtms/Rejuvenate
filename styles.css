@@ -44,12 +44,22 @@ body.page-home {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   color: var(--text);
   text-decoration: none;
   font-family: "Manrope", sans-serif;
   font-size: clamp(1.8rem, 2.9vw, 2.6rem);
   letter-spacing: 0;
   font-weight: 500;
+}
+
+.brand-logo {
+  width: calc(clamp(2rem, 3.4vw, 2.8rem) + 30px);
+  height: calc(clamp(2rem, 3.4vw, 2.8rem) + 30px);
+  display: block;
+  flex-shrink: 0;
 }
 
 .site-nav {
@@ -273,10 +283,46 @@ body.page-home {
   font-size: clamp(1.02rem, 2vw, 1.25rem);
 }
 
-.page-hero-about,
+.contact-intro {
+  margin: 0 auto 1.5rem;
+  text-align: center;
+  padding: clamp(0.75rem, 2vw, 1.25rem) 0;
+}
+
+.contact-intro h1,
+.contact-intro p {
+  margin: 0;
+}
+
+.contact-intro h1 {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  margin-bottom: 0.45rem;
+}
+
+.contact-intro p {
+  color: var(--muted);
+  font-size: clamp(1.02rem, 2vw, 1.25rem);
+}
+
+.page-hero-about {
+  background-image: url("Reference/aboutPageWallNew.png");
+}
+
 .page-hero-contact,
 .page-hero-location {
   background-image: url("Reference/original fron page image.jpg");
+}
+
+.page-hero-cape-town {
+  background-image: url("Reference/tableMountain.jpg");
+  background-size: calc(95% + 70px) auto;
+  background-repeat: no-repeat;
+  background-position: center calc(50% + 60px);
+}
+
+.page-hero-durban {
+  background-image: url("Reference/durban.jpg");
 }
 
 .content-grid,
@@ -413,6 +459,11 @@ body.page-home {
 
   .brand {
     font-size: clamp(1.5rem, 7vw, 2rem);
+  }
+
+  .brand-logo {
+    width: calc(clamp(1.65rem, 7vw, 2.2rem) + 30px);
+    height: calc(clamp(1.65rem, 7vw, 2.2rem) + 30px);
   }
 
   .menu-toggle {
