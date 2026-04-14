@@ -526,6 +526,12 @@ body.page-home {
     background-position: 52% 40%;
   }
 
+  .page-hero-cape-town {
+    background-size: cover;
+    background-position: center 45%;
+    background-repeat: no-repeat;
+  }
+
   .hero h1 {
     font-size: clamp(2rem, 10vw, 3rem);
     color: #050505;
