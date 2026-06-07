@@ -9,7 +9,7 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import helmet from 'helmet';
 
-import { db, isDbClientAvailable } from './lib/db';
+import { db } from './lib/db';
 import { AppError } from './lib/errors';
 
 export function createApp() {
@@ -27,16 +27,6 @@ export function createApp() {
    * minimal (no sensitive details in the response body).
    */
   router.get('/healthz', async (_req: Request, res: Response) => {
-    if (!isDbClientAvailable() || !db) {
-      // Expected pre-Phase-1 (no Prisma schema / generated client yet).
-      res.status(503).json({
-        status: 'degraded',
-        db: 'unavailable',
-        reason: 'Prisma client not generated yet (schema pending — see Phase 1)',
-      });
-      return;
-    }
-
     try {
       await db.$queryRaw`SELECT 1`;
       res.status(200).json({ status: 'ok', db: 'up' });
