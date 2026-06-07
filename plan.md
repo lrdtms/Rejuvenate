@@ -13,7 +13,9 @@
 
 ---
 
-## Phase 0 — Project Scaffolding & Repo Structure
+## Phase 0 — Project Scaffolding & Repo Structure ✅ COMPLETED (2026-06-07)
+
+> Done on `feature/dynamic-rewrite`: top-level layout (`api/`, `web/`, `docs/architecture/adr/`, `deploy/`), `api/` Express+TS skeleton with pinned deps and a passing healthz/error-shape smoke test, `web/` Vite+React+TS skeleton with the §10.1 directory structure and pinned deps, `docker-compose.yml` (postgres:16), `.nvmrc` (Node 22 LTS), root `README.md`, and all 7 ADRs written in `docs/architecture/adr/`. Lint/typecheck/build verified clean on both `api/` and `web/`. Not yet committed to git.
 
 **Goal**: Establish the monorepo layout, tooling, and CI-less local dev loop before any feature code.
 
@@ -45,7 +47,9 @@ Steps:
 
 ---
 
-## Phase 1 — Database Schema & Prisma Setup
+## Phase 1 — Database Schema & Prisma Setup ✅ COMPLETED (2026-06-07)
+
+> Done on `feature/dynamic-rewrite`: full `schema.prisma` (6 models, 6 enums, indexes, FK `onDelete` behaviors, documented session-store decision — `connect-pg-simple` owns its table outside Prisma's migration history), initial migration applied to local dev Postgres, idempotent `seed.ts` (bootstrap ADMIN with one-time-printed random password + the 6 fixed CMS slot registry rows), and `db.ts` rewritten from the Phase-0 lazy-require shim into a properly typed `PrismaClient` singleton with the `globalThis` hot-reload guard (with `/healthz` updated to a real `SELECT 1` check). All work reviewed for spec compliance and code quality, lint/typecheck/build verified clean. Commits: `35677b9`, `e19c6d6`, `1d0895e`, `24a020a`, `8fee71f`.
 
 **Goal**: One complete, reviewed Prisma schema capturing the full data model from architecture.md §7 — migrated once, correctly, before any module depends on it.
 
