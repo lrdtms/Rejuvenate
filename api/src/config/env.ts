@@ -16,6 +16,11 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   SESSION_SECRET: z.string().min(16, 'SESSION_SECRET must be set to a long random value'),
+  // Single allow-listed SPA origin for credentialed CORS (architecture.md §11/§12 —
+  // cookies require `credentials: true` + an explicit origin, never `origin: '*'`).
+  // Locally this is the Vite dev server; in production it's the deployed SPA origin —
+  // exactly one origin per environment, so a single string is sufficient (no list).
+  CORS_ALLOWED_ORIGIN: z.string().url('CORS_ALLOWED_ORIGIN must be a valid origin URL'),
   SMTP_HOST: z.string().optional().default(''),
   SMTP_PORT: z.coerce.number().int().positive().optional().default(587),
   SMTP_SECURE: z

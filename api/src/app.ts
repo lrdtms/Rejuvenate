@@ -1,23 +1,90 @@
 /**
  * Express application factory.
  *
- * Phase 0 scaffolding: wires up the bare minimum (security headers, JSON body parsing,
- * /healthz, and a consistent JSON error shape) so the skeleton boots and is testable.
- * Sessions, RBAC middleware, rate limiting, and feature module routers are added in
- * later phases per plan.md (Phase 2 — Backend Application Skeleton).
+ * Phase 2 scaffolding: wires up the cross-cutting global middleware every module
+ * relies on (security headers, trust-proxy, CORS, cookie/body parsing, request
+ * logging), plus /healthz and the consistent JSON error shape. Sessions, RBAC
+ * middleware, rate limiting, and feature module routers are added in later phases
+ * per plan.md (Phase 2 — Backend Application Skeleton).
  */
+import cookieParser from 'cookie-parser';
+import cors from 'cors';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import helmet from 'helmet';
+import { pinoHttp } from 'pino-http';
 
+import { env } from './config/env';
 import { db } from './lib/db';
 import { AppError } from './lib/errors';
 
-export function createApp() {
+/**
+ * Optional hook for mounting additional routers under `/api/v1` ahead of the
+ * catch-all 404/error handlers. Production code never passes this — `server.ts`
+ * calls `createApp()` with no arguments. It exists solely so integration tests can
+ * register throwaway probe routes (e.g. to assert `req.cookies`/`req.log` are
+ * populated by the global middleware) without reaching into `createApp`'s closure
+ * or duplicating its middleware stack in a parallel test-only app.
+ */
+export interface CreateAppOptions {
+  mountForTesting?: (router: express.Router) => void;
+}
+
+export function createApp(options: CreateAppOptions = {}) {
   const app = express();
 
   app.disable('x-powered-by');
   app.use(helmet());
+
+  // Required for correct behaviour behind the Nginx reverse proxy described in
+  // architecture.md §11: without this, `express-rate-limit` and `express-session`'s
+  // `secure`-cookie detection see the proxy's loopback connection (not the real
+  // client), so IP-based rate limiting and "only set Secure cookies over HTTPS"
+  // checks silently misbehave in production while appearing to work locally.
+  // `1` trusts exactly one hop (the Nginx proxy) — see plan.md Phase 2 review note.
+  app.set('trust proxy', 1);
+
+  // Credentialed CORS: server-side sessions live in cookies (ADR-0002), so the
+  // browser must be told both `Access-Control-Allow-Credentials: true` AND an
+  // explicit allow-listed origin — `origin: '*'` is rejected by browsers when
+  // credentials are involved, and would be unsafe even if it weren't. Exactly one
+  // SPA origin is expected per environment (the Vite dev server locally, the
+  // deployed SPA in prod), sourced from env so it never needs a code change to
+  // deploy to a new host.
+  app.use(
+    cors({
+      origin: env.CORS_ALLOWED_ORIGIN,
+      credentials: true,
+    }),
+  );
+
+  app.use(cookieParser());
   app.use(express.json());
+
+  // Request logging (pino + pino-http): structured JSON logs of method, path,
+  // status code, and duration for every request — chosen over morgan for first-class
+  // structured/JSON output (pairs well with PM2/journald log collection on the VPS)
+  // and built-in redaction support.
+  //
+  // Deliberately NOT logging request/response bodies or headers such as `cookie`/
+  // `authorization`: RSVP and login payloads carry personal data (POPIA) and
+  // credentials, and logging them wholesale would itself be a compliance violation.
+  // `pino-http`'s default request/response serializers only emit method, url,
+  // status code, and the standard non-sensitive headers — never `req.body`.
+  app.use(
+    pinoHttp({
+      level: env.NODE_ENV === 'test' ? 'silent' : 'info',
+      // Keep noise down: uptime monitors hit /healthz frequently and its result
+      // carries no diagnostic value beyond "DB up/down" (already logged separately
+      // by the handler on failure).
+      autoLogging: {
+        ignore: (req) => req.url === '/api/v1/healthz',
+      },
+      redact: {
+        paths: ['req.headers.cookie', 'req.headers.authorization', 'res.headers["set-cookie"]'],
+        remove: true,
+      },
+    }),
+  );
 
   const router = express.Router();
 
@@ -36,6 +103,10 @@ export function createApp() {
       res.status(503).json({ status: 'degraded', db: 'down' });
     }
   });
+
+  // Test-only seam (see `CreateAppOptions` doc comment above) — registered before
+  // the catch-all 404 handler so probe routes are actually reachable.
+  options.mountForTesting?.(router);
 
   app.use('/api/v1', router);
 
