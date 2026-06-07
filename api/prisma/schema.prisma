@@ -1,0 +1,303 @@
+// Rejuvenate — Prisma schema
+//
+// Authoritative source for this data model: rejuvenate-architecture.md §7
+// (Entity-Relationship Overview, Field & Constraint Notes, Domain Invariants).
+// Do not "improve" field shapes here without updating the architecture doc and
+// confirming with the stakeholder — see the inline notes below for the specific
+// decisions that were deliberate (e.g. Registration.age as an exact integer,
+// Event.priceCents as dormant integer cents, no FK from Registration to User).
+//
+// ---------------------------------------------------------------------------
+// SESSION STORE — DECISION RECORD (read before adding a `Session` model)
+// ---------------------------------------------------------------------------
+// ADR-0002 requires server-side sessions backed by Postgres. We use
+// `connect-pg-simple` (already pinned in api/package.json) as the session
+// store for `express-session`.
+//
+// DECISION: Option (a) — let `connect-pg-simple` own and manage its `session`
+// table OUTSIDE Prisma's migration history. We deliberately do NOT hand-write
+// a Prisma `Session` model here.
+//
+// Rationale:
+//   - connect-pg-simple's expected table shape (sid PK, sess json, expire
+//     timestamp + index) is stable, well-documented, and the library ships
+//     its own creation SQL (`table.sql`) plus a `createTableIfMissing: true`
+//     constructor option that creates it on first run if absent.
+//   - Letting Prisma "own" a table that another library also writes to/reads
+//     from at runtime invites drift between Prisma's migration history and
+//     the table's actual runtime-managed shape (e.g. connect-pg-simple may
+//     prune/alter rows in ways Prisma's migration diffing doesn't expect).
+//   - Keeping it out of schema.prisma keeps `prisma migrate dev`'s diffing
+//     focused on tables Prisma actually owns end-to-end.
+//
+// CONSEQUENCES — make sure whoever wires up auth (Phase 3) knows:
+//   - `prisma migrate dev` / `prisma migrate deploy` will NOT create, show,
+//     or diff this table. Do not be surprised when `session` doesn't appear
+//     in the migration history.
+//   - The table is created on first run via connect-pg-simple's
+//     `createTableIfMissing: true` session-store option (simplest for a
+//     single-operator deploy), OR by running connect-pg-simple's bundled
+//     `node_modules/connect-pg-simple/table.sql` once against the target DB
+//     as a one-time setup step (documented in the deploy runbook).
+//   - Back up this table along with the rest of the database (it's just
+//     another table in the same Postgres instance) — the daily pg_dump
+//     covers it automatically.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  BLOGGER
+  EVENT_MANAGER
+}
+
+enum BlogStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum Branch {
+  CAPE_TOWN
+  DURBAN
+  OTHER
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
+enum MediaOwnerType {
+  BLOG_POST
+  EVENT
+}
+
+// architecture.md §7.1 ER diagram writes these as `plainText | richText`.
+// Prisma enum members conventionally use UPPER_SNAKE_CASE (lowercase-with-no-
+// separator members like `plainText` are legal in Prisma but inconsistent
+// with the other five enums in this schema) — deviating from the doc's exact
+// casing here for consistency; the *meaning* (plain text vs constrained rich
+// text) is unchanged.
+enum CMSFormat {
+  PLAIN_TEXT
+  RICH_TEXT
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  // argon2id hash (see ADR-0002 / architecture.md §9) — never plaintext or
+  // reversibly-encrypted. Hashing parameters are chosen/pinned in the auth
+  // module (Phase 3), not here.
+  passwordHash String
+  role         Role
+  // Soft-delete / deactivation flag. Staff accounts are never hard-deleted
+  // (preserves the audit trail for authored content) — this is *why* the
+  // FKs below use Restrict/SetNull rather than Cascade.
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  blogPosts        BlogPost[]
+  events           Event[]
+  cmsContentEdited CMSContent[]
+
+  @@map("users")
+}
+
+model BlogPost {
+  id          String     @id @default(uuid())
+  title       String
+  slug        String     @unique
+  body        String     @db.Text
+  status      BlogStatus @default(DRAFT)
+  publishedAt DateTime?
+  authorId    String
+
+  // A post is only ever publicly visible when status = PUBLISHED AND
+  // publishedAt <= now() (architecture.md §7.3 invariant #3). Author-edit
+  // scoping (own posts only, unless ADMIN) is an application-layer rule in
+  // the service layer (architecture.md §7.2) — intentionally not encoded
+  // here, so the schema stays stable if that policy changes.
+  //
+  // onDelete: Restrict — User rows are never hard-deleted (isActive is the
+  // documented deactivation pattern). Restrict makes that invariant explicit
+  // at the DB level: you cannot delete a user who has authored posts without
+  // first reassigning/deleting those posts. Cascade would silently destroy
+  // authored content if a user row were ever removed by mistake.
+  author User @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  // No Prisma relation to MediaAsset — see MediaAsset's ownerType/ownerId
+  // comment (ADR-0005: polymorphic-by-convention, app-layer integrity only).
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Supports the public list query: WHERE status = PUBLISHED AND
+  // publishedAt <= now() ORDER BY publishedAt DESC.
+  @@index([status, publishedAt])
+  @@map("blog_posts")
+}
+
+model Event {
+  id             String      @id @default(uuid())
+  title          String
+  slug           String      @unique
+  description    String      @db.Text
+  startsAt       DateTime
+  endsAt         DateTime
+  branch         Branch
+  locationDetail String
+  // Nullable — when set, Registration creation is capped transactionally
+  // (architecture.md §7.3 invariant #6). No waitlisting in v1.
+  capacity       Int?
+
+  // --- Dormant paid-ticketing fields (ADR-0006) ---
+  // Included now so a future v2 paid-ticketing feature does not require a
+  // migration that touches existing rows. v1 NEVER sets isPaid = true and
+  // NEVER acts on priceCents — zero payment logic is built against these.
+  // Stored as an integer count of ZAR cents (NOT Decimal/float) to avoid
+  // floating-point currency bugs; the `Cents` suffix makes the unit
+  // unambiguous in code (architecture.md §7.2 clarifies "stored as integer
+  // cents" despite the ER diagram's loose pseudocode `decimal price`).
+  isPaid     Boolean @default(false)
+  priceCents Int?
+
+  status      EventStatus @default(DRAFT)
+  createdById String
+
+  // onDelete: Restrict — same rationale as BlogPost.author: User rows are
+  // never hard-deleted, so deleting a user who created events should be
+  // blocked at the DB level rather than silently cascading away event data.
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  registrations Registration[]
+
+  // No Prisma relation to MediaAsset — see MediaAsset's ownerType/ownerId
+  // comment (ADR-0005: polymorphic-by-convention, app-layer integrity only).
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Supports the public/filtered list query: WHERE status = PUBLISHED
+  // [AND branch = ?] ORDER BY startsAt.
+  @@index([status, startsAt, branch])
+  @@map("events")
+}
+
+model Registration {
+  id      String @id @default(uuid())
+  eventId String
+
+  // onDelete: Cascade is appropriate ONLY if we want registrations removed
+  // when their event is deleted. Events are not described as soft-deleted in
+  // the architecture doc the way Users are — but to avoid silently destroying
+  // POPIA-relevant personal-data records via an event deletion, we restrict
+  // deletion of an event that still has registrations attached. Operators
+  // must explicitly handle/export registrations before removing an event.
+  event Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  // Deliberately NO foreign key to User — registrations are anonymous,
+  // one-off submissions (architecture.md §7.2 "Registration" notes; PRD §9).
+  // Column names follow the architecture.md ER diagram exactly: firstName /
+  // surname (NOT name/surname as the PRD's looser prose states — architecture
+  // is authoritative).
+  firstName String
+  surname   String
+  // Exact integer age per explicit stakeholder requirement — NOT a birthdate
+  // or age range. Validated at the API boundary as a positive integer in
+  // 0–120 (architecture.md §7.3 invariant #7); do not "improve" this to a
+  // birthdate without a confirmed stakeholder decision (that would change
+  // what personal data is collected and retained under POPIA).
+  age   Int
+  email String
+  phone String
+
+  // POPIA fields (architecture.md §7.2 / §12): which version of the consent
+  // notice the registrant accepted, and the retention horizon for this
+  // record. `retainUntil` is nullable because the *retention period* is a
+  // pending stakeholder decision (go-live blocker) — the mechanism (this
+  // column + a future purge job) is wired up regardless.
+  consentVersion String
+  retainUntil    DateTime?
+
+  registeredAt DateTime @default(now())
+
+  // Heavily queried for headcount / attendee-list / capacity-check
+  // (architecture.md §7 indexing guidance). Deliberately NOT a
+  // @@unique([eventId, email]) — the duplicate-guard is a *soft*,
+  // application-layer rule (the same email may legitimately register a
+  // companion under a different name); a DB-level unique constraint here
+  // would be incorrect and would have to be migrated away later.
+  @@index([eventId])
+  @@map("registrations")
+}
+
+model CMSContent {
+  id      String    @id @default(uuid())
+  // Fixed, developer-defined named slots (e.g. "about.card.who-are-we") —
+  // NOT a generic page-builder (ADR-0007 / architecture.md §7.2). The API
+  // must reject writes to slot keys outside the seeded registry
+  // (architecture.md §7.3 invariant #8).
+  slotKey String    @unique
+  format  CMSFormat
+  value   String    @db.Text
+
+  lastEditedById String?
+
+  // onDelete: SetNull — if the editor's user account is ever removed, the
+  // content itself must remain (it's site copy, not authored "content" in
+  // the same ownership sense as a BlogPost/Event). SetNull preserves the
+  // CMS slot value while clearing the now-dangling attribution. Restrict
+  // would be overly strict here (it would block deactivating/removing the
+  // last editor of any slot), and Cascade would be wrong (deleting site copy
+  // because an editor's account was removed makes no sense).
+  lastEditedBy User? @relation(fields: [lastEditedById], references: [id], onDelete: SetNull)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("cms_content")
+}
+
+model MediaAsset {
+  id      String         @id @default(uuid())
+  url     String
+  altText String
+  // Polymorphic-by-convention pair: `ownerType` discriminates which table
+  // `ownerId` logically points into (BLOG_POST -> BlogPost.id, EVENT ->
+  // Event.id). Deliberately NOT modeled as a real Prisma relation / DB-level
+  // foreign key — `ownerId` cannot simultaneously be an FK to two different
+  // parent tables, and a real FK to just one would make the other owner type
+  // either impossible or untracked by the DB. Per ADR-0005, referential
+  // integrity for (ownerType, ownerId) is enforced entirely in the
+  // application/service layer (MediaService validates that the referenced
+  // BlogPost/Event actually exists — and, per the RBAC ownership-check
+  // pattern, that the acting user owns it — before insert/update).
+  ownerType MediaOwnerType
+  ownerId   String
+
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  // Supports the common "fetch all media for this owner, in order" query.
+  @@index([ownerType, ownerId])
+  @@map("media_assets")
+}
