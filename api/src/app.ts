@@ -3,9 +3,17 @@
  *
  * Phase 2 scaffolding: wires up the cross-cutting global middleware every module
  * relies on (security headers, trust-proxy, CORS, cookie/body parsing, request
- * logging), plus /healthz and the consistent JSON error shape. Sessions, RBAC
- * middleware, rate limiting, and feature module routers are added in later phases
- * per plan.md (Phase 2 — Backend Application Skeleton).
+ * logging), plus /healthz and the consistent JSON error shape. A generic
+ * `rateLimiter()` factory exists (middleware/rateLimit.ts) but is mounted
+ * per-route by feature modules, not globally here.
+ *
+ * Phase 3 additions: Postgres-backed sessions (`express-session` +
+ * `connect-pg-simple`, see `modules/auth/session.ts`) are mounted on the
+ * `/api/v1` router — deliberately AFTER `/healthz` is registered on it, so the
+ * health probe stays reachable without touching the session store (see the
+ * inline comment at the session-mounting site for the full reasoning). RBAC
+ * middleware and feature module routers are added in subsequent phases per
+ * plan.md.
  */
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -16,6 +24,7 @@ import { pinoHttp } from 'pino-http';
 import { env } from './config/env';
 import { db } from './lib/db';
 import { AppError } from './lib/errors';
+import { createSessionMiddleware, enforceAbsoluteSessionMaxAge } from './modules/auth/session';
 
 /**
  * Upper bound on how long `/healthz` will wait for `SELECT 1` before treating the
@@ -169,8 +178,49 @@ export function createApp(options: CreateAppOptions = {}) {
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // Sessions (ADR-0002 / plan.md Phase 3 step 1) — mounted on the ROUTER, not
+  // globally on `app`, and AFTER `/healthz` is registered above.
+  //
+  // Why this matters: `/healthz` (architecture.md §11 — the external uptime
+  // monitor's liveness/readiness probe) must stay reachable WITHOUT a session —
+  // per plan.md Phase 2 step 5, "Mount [healthz] *before* the auth/session
+  // middleware so an external monitor doesn't need credentials and a DB outage
+  // doesn't also break session-store lookups for the health check itself." A
+  // session-store lookup is itself a Postgres query (connect-pg-simple reads/
+  // writes the `session` table) — routing the health probe through it would
+  // mean a DB outage breaks BOTH the thing being checked and the check itself,
+  // and would needlessly couple an unauthenticated monitoring endpoint to the
+  // session store's availability/latency.
+  //
+  // Express evaluates middleware/routes attached to the SAME router object in
+  // REGISTRATION order: a request matching an earlier-registered layer that
+  // sends a response (as `/healthz`'s handler does — it never calls `next()`)
+  // never reaches later-registered layers on that router, including
+  // `router.use(...)` calls below. Registering the session middleware as
+  // `router.use(...)` AFTER `router.get('/healthz', ...)` therefore guarantees
+  // `/healthz` requests never touch `express-session`/`connect-pg-simple` at
+  // all — while every OTHER route on this router (mounted below, including
+  // `mountForTesting` probes and all future feature-module routers) gets
+  // `req.session`/`req.sessionID` populated, all without changing `/healthz`'s
+  // final mount path (`/api/v1/healthz` — unchanged, as required).
+  //
+  // A global `app.use(session(...))` mounted before `app.use('/api/v1', router)`
+  // would NOT achieve this: Express would run it for every `/api/v1/*` request
+  // — including `/healthz` — regardless of where `/healthz` is later attached
+  // to `router`, because global middleware runs in registration order
+  // independent of which router eventually handles the request.
+  router.use(createSessionMiddleware());
+  // Enforces the absolute session-lifetime ceiling that `express-session` has
+  // no native concept of — must run immediately after the session middleware
+  // populates `req.session` (see `modules/auth/session.ts` for the full
+  // rolling-vs-absolute rationale and chosen TTL values).
+  router.use(enforceAbsoluteSessionMaxAge());
+
   // Test-only seam (see `CreateAppOptions` doc comment above) — registered before
-  // the catch-all 404 handler so probe routes are actually reachable.
+  // the catch-all 404 handler so probe routes are actually reachable. Runs AFTER
+  // the session middleware above, so probe routes correctly observe
+  // `req.session`/`req.sessionID` like any real authenticated route would.
   options.mountForTesting?.(router);
 
   app.use('/api/v1', router);
