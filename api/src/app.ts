@@ -43,27 +43,21 @@ export function createApp(options: CreateAppOptions = {}) {
   // `1` trusts exactly one hop (the Nginx proxy) — see plan.md Phase 2 review note.
   app.set('trust proxy', 1);
 
-  // Credentialed CORS: server-side sessions live in cookies (ADR-0002), so the
-  // browser must be told both `Access-Control-Allow-Credentials: true` AND an
-  // explicit allow-listed origin — `origin: '*'` is rejected by browsers when
-  // credentials are involved, and would be unsafe even if it weren't. Exactly one
-  // SPA origin is expected per environment (the Vite dev server locally, the
-  // deployed SPA in prod), sourced from env so it never needs a code change to
-  // deploy to a new host.
-  app.use(
-    cors({
-      origin: env.CORS_ALLOWED_ORIGIN,
-      credentials: true,
-    }),
-  );
-
-  app.use(cookieParser());
-  app.use(express.json());
-
   // Request logging (pino + pino-http): structured JSON logs of method, path,
   // status code, and duration for every request — chosen over morgan for first-class
   // structured/JSON output (pairs well with PM2/journald log collection on the VPS)
   // and built-in redaction support.
+  //
+  // Deliberately registered BEFORE cors/cookieParser/express.json(): pino-http
+  // attaches `req.log` and starts its request timer on the way in, then emits the
+  // access-log line from a `res.on('finish'/'close')` listener — so as long as it's
+  // mounted first, every response gets logged regardless of which downstream
+  // middleware/handler produced it (including `express.json()` itself rejecting a
+  // malformed body with a parse error that lands in the central error handler
+  // below). Mounting it any later would mean requests that error out during
+  // body-parsing — e.g. a malformed RSVP/login submission — bypass it entirely,
+  // leaving zero structured access-log line for exactly the requests most likely to
+  // carry sensitive data and most worth auditing.
   //
   // Deliberately NOT logging request/response bodies or headers such as `cookie`/
   // `authorization`: RSVP and login payloads carry personal data (POPIA) and
@@ -85,6 +79,23 @@ export function createApp(options: CreateAppOptions = {}) {
       },
     }),
   );
+
+  // Credentialed CORS: server-side sessions live in cookies (ADR-0002), so the
+  // browser must be told both `Access-Control-Allow-Credentials: true` AND an
+  // explicit allow-listed origin — `origin: '*'` is rejected by browsers when
+  // credentials are involved, and would be unsafe even if it weren't. Exactly one
+  // SPA origin is expected per environment (the Vite dev server locally, the
+  // deployed SPA in prod), sourced from env so it never needs a code change to
+  // deploy to a new host.
+  app.use(
+    cors({
+      origin: env.CORS_ALLOWED_ORIGIN,
+      credentials: true,
+    }),
+  );
+
+  app.use(cookieParser());
+  app.use(express.json());
 
   const router = express.Router();
 
@@ -119,7 +130,7 @@ export function createApp(options: CreateAppOptions = {}) {
   // consistent `{ error: { code, message, fields? } }` shape from architecture.md §8.
   // Express identifies error-handling middleware by arity (4 args) — `_next` must
   // stay declared even though unused, so it's prefixed to satisfy the lint rule.
-  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof AppError) {
       res.status(err.statusCode).json({
         error: {
@@ -131,8 +142,25 @@ export function createApp(options: CreateAppOptions = {}) {
       return;
     }
 
-    // eslint-disable-next-line no-console
-    console.error('Unhandled error:', err);
+    // Log via the per-request pino logger (attached by `pinoHttp`, mounted ahead of
+    // every other middleware — see the comment at its registration site) rather than
+    // raw `console.error(err)`. This matters beyond consistency: body-parser raises
+    // plain `SyntaxError`s for malformed JSON with the *raw, unredacted request body*
+    // attached as `err.body` (e.g. `{ body: '{not valid json', type:
+    // 'entity.parse.failed', ... }`). Dumping that error object wholesale to stdout —
+    // exactly what `console.error('Unhandled error:', err)` did — would print
+    // whatever the client sent verbatim, completely bypassing the
+    // `redact: { paths: [...], remove: true }` pipeline this commit established and
+    // leaking personal data/credential fragments from a malformed RSVP/login
+    // submission straight into the logs (a POPIA violation). Logging only
+    // `err.name`/`err.message` (never the error object itself, never `err.body`)
+    // keeps the "what broke" diagnostic value without the body ever reaching stdout.
+    const safeError =
+      err instanceof Error
+        ? { name: err.name, message: err.message }
+        : { name: 'UnknownError', message: String(err) };
+    req.log.error({ err: safeError }, 'Unhandled error');
+
     res.status(500).json({
       error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
     });

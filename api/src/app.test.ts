@@ -7,12 +7,15 @@
  * concern by nature.
  *
  * Deliberately NOT covered here (out of scope for this task / better tested
- * elsewhere): helmet header *contents* (library's own test suite covers that),
- * the /healthz DB check (covered when the auth/db modules land), and the error
- * handler (pre-existing, untouched by this change).
+ * elsewhere): helmet header *contents* (library's own test suite covers that)
+ * and the /healthz DB check (covered when the auth/db modules land). The error
+ * handler *is* covered below — see "request logging" — because its interaction
+ * with `pino-http`'s registration order/redaction is the crux of a real defect
+ * this suite now guards against (a malformed body bypassing both the access log
+ * and the redaction pipeline).
  */
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createApp } from './app';
 import { env } from './config/env';
@@ -111,6 +114,59 @@ describe('createApp() — global middleware (Phase 2)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ hasLogger: true });
+    });
+
+    it('still attaches req.log and reaches the central error handler when the body fails to parse', async () => {
+      // Regression test for a real defect: `pinoHttp` was originally registered
+      // *after* `cors`/`cookieParser`/`express.json()`, so a request that errors
+      // during body-parsing (e.g. malformed JSON on a POST) skipped it entirely —
+      // zero structured access-log line for exactly the kind of request (a broken
+      // RSVP/login submission) most worth auditing. Worse, such requests fell
+      // through to the central error handler's `console.error('Unhandled error:',
+      // err)`, and body-parser's `SyntaxError` carries the *raw, unredacted request
+      // body* as `err.body` — so the raw POST body was being dumped straight to
+      // stdout, completely bypassing the redaction this commit was meant to
+      // establish.
+      //
+      // `pino-http` is silenced in tests (`level: 'silent'`) so we can't assert on
+      // the emitted log line's contents directly here without a logger-injection
+      // seam that would meaningfully complicate this harness (see CreateAppOptions).
+      // Instead we assert the two things that actually matter and that *would*
+      // regress if the registration order slipped again:
+      //   1. `req.log` is populated for the request that hit the parse error (proven
+      //      indirectly: `req.log.error(...)` in the error handler must not throw —
+      //      if pino-http hadn't run, `req.log` would be `undefined` and the handler
+      //      itself would crash, surfacing as a hung/500-less response here).
+      //   2. The raw request body never reaches `console.error` (or any other
+      //      console sink) — i.e. the leak is closed regardless of *how* it's logged.
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        const app = createApp();
+
+        const res = await request(app)
+          .post('/api/v1/__nonexistent_route_for_malformed_body_test')
+          .set('Content-Type', 'application/json')
+          .send('{not valid json');
+
+        expect(res.status).toBe(500);
+        expect(res.body).toEqual({
+          error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
+        });
+
+        // The raw malformed body must never be handed to console.error (or printed
+        // at all) — assert across every call and every argument, not just the
+        // "Unhandled error" call site, so this stays a true regression guard even if
+        // the handler's call site/message changes later.
+        for (const call of consoleErrorSpy.mock.calls) {
+          for (const arg of call) {
+            const serialized = typeof arg === 'string' ? arg : JSON.stringify(arg);
+            expect(serialized).not.toContain('{not valid json');
+          }
+        }
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
     });
   });
 });
