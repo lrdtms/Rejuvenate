@@ -1,0 +1,4 @@
+Local-dev-only placeholder so the `uploads/` directory exists for manual testing.
+
+This directory is gitignored (see api/.gitignore) and is NOT where production media
+lives — see the warning in api/.gitignore and deploy/README.md (ADR-0004 / Phase 10).

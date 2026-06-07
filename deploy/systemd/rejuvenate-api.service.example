@@ -1,0 +1,46 @@
+# systemd unit skeleton for the Rejuvenate API process (architecture.md §11).
+#
+# STATUS: Phase 0 placeholder — NOT production-ready. Real paths/user and the
+# environment-file location are filled in during Phase 10. (PM2 is an acceptable
+# alternative supervisor — pick one and document the choice in Phase 10; this file
+# assumes systemd.)
+#
+# Install (Phase 10):
+#   sudo cp rejuvenate-api.service /etc/systemd/system/rejuvenate-api.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now rejuvenate-api
+#
+# The process MUST bind to 127.0.0.1 only (see api/src/server.ts) — Nginx is the
+# only public-facing entry point (architecture.md §11).
+
+[Unit]
+Description=Rejuvenate API (Express + TypeScript, modular monolith)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+# TODO (Phase 10): create a dedicated, unprivileged system user — never run as root.
+User=TODO_REPLACE_WITH_DEDICATED_SERVICE_USER
+WorkingDirectory=/var/www/rejuvenate/app/api
+# TODO (Phase 10): confirm Node version matches the root .nvmrc; consider an absolute
+# path to the Node binary installed for that user/version.
+ExecStart=/usr/bin/node dist/server.js
+Restart=on-failure
+RestartSec=5
+
+# Real secrets (DATABASE_URL, SESSION_SECRET, SMTP_*) live in an EnvironmentFile that
+# is itself NOT committed to version control and has restrictive permissions
+# (chmod 600, owned by the service user). Never inline secrets in this unit file.
+EnvironmentFile=/var/www/rejuvenate/app/api/.env
+Environment=NODE_ENV=production
+
+# --- Hardening (tune in Phase 10) ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+# Allow writes only to the directories the process actually needs:
+ReadWritePaths=/var/www/rejuvenate/uploads
+
+[Install]
+WantedBy=multi-user.target

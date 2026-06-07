@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment files — never commit real secrets
+.env
+.env.*
+!.env.example
+
+# Local/dev media uploads
+#
+# IMPORTANT (Phase 0 -> Phase 10 carry-over):
+# This `uploads/` entry exists ONLY to keep local-dev-time uploaded files out of git.
+# It must NOT be taken as a hint about where production uploads should live.
+#
+# In production, the uploads directory MUST live OUTSIDE this `api/` checkout entirely
+# (e.g. /var/www/rejuvenate/uploads on the VPS — see deploy/README.md and
+# architecture.md §11 / ADR-0004). `git pull` and `npm run build` (which empties/rewrites
+# `dist/`) must never be able to touch the real uploads directory. Wiring the upload
+# path via an absolute, environment-configured value (not a path relative to this repo)
+# is a hard requirement — see the Phase 10 deploy notes.
+uploads/*
+!uploads/.gitkeep
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Prisma — generated client lives in node_modules, nothing to ignore here yet

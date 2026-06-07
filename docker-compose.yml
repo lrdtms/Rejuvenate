@@ -1,0 +1,37 @@
+# Local development database — for dev/test parity with production (architecture.md
+# §11.3 recommends Dockerized Postgres matching the production major version).
+#
+# Usage:
+#   docker compose up -d         # start Postgres in the background
+#   docker compose down          # stop (data persists in the named volume)
+#   docker compose down -v       # stop AND wipe the dev database
+#
+# Then point api/.env's DATABASE_URL at this instance, e.g.:
+#   DATABASE_URL="postgresql://rejuvenate:rejuvenate@localhost:5432/rejuvenate_dev?schema=public"
+#
+# NOTE: pinned to `postgres:16` (NOT `:latest`) so local dev exactly matches the
+# production major version (Postgres 16 on the VPS — see architecture.md §11).
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: rejuvenate-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rejuvenate
+      POSTGRES_PASSWORD: rejuvenate
+      POSTGRES_DB: rejuvenate_dev
+    ports:
+      # Exposed on localhost only — not intended for remote access.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - rejuvenate_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rejuvenate -d rejuvenate_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  rejuvenate_pgdata:
+    name: rejuvenate_pgdata

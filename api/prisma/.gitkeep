@@ -1,0 +1,7 @@
+Prisma schema, migrations, and seed script land here in Phase 1 (see plan.md):
+
+  - schema.prisma
+  - migrations/<timestamp>_init/migration.sql
+  - seed.ts
+
+Intentionally empty in Phase 0 — do not add a schema here yet.

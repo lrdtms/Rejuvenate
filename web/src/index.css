@@ -1,0 +1,25 @@
+/*
+ * Temporary baseline stylesheet (Phase 0 scaffolding only).
+ *
+ * The Rejuvenate brand identity (Manrope/Space Grotesk, color palette, hero
+ * banners, .card patterns, responsive breakpoints) lives in `styles.css` at
+ * the repo root and will be ported 1:1 into `src/design-system/` — see
+ * architecture.md §10.3. This file intentionally stays minimal until then so
+ * it doesn't fight with that port.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
+}

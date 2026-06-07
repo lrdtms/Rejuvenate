@@ -1,0 +1,72 @@
+# Nginx server-block skeleton for Rejuvenate (architecture.md §11).
+#
+# STATUS: Phase 0 placeholder — NOT production-ready. Real values, TLS cert paths
+# (via Certbot), and security-header tuning are filled in during Phase 10.
+#
+# Responsibilities of this server block:
+#   1. Terminate TLS (Certbot-managed certificates)
+#   2. Serve the built SPA static assets
+#   3. Reverse-proxy /api/* to the Node process on 127.0.0.1:<PORT>
+#   4. Serve /media/* from the uploads directory with a content-type allow-list and
+#      script execution disabled (defense against malicious uploads served as
+#      executable content — see ADR-0004 / architecture.md §12)
+#   5. Apply baseline security headers site-wide
+
+# --- TODO (Phase 10): redirect HTTP -> HTTPS ---
+server {
+    listen 80;
+    listen [::]:80;
+    server_name TODO_REPLACE_WITH_REAL_DOMAIN;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name TODO_REPLACE_WITH_REAL_DOMAIN;
+
+    # --- TLS (Certbot-managed — TODO: fill in real cert paths in Phase 10) ---
+    ssl_certificate     /etc/letsencrypt/live/TODO_REPLACE_WITH_REAL_DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/TODO_REPLACE_WITH_REAL_DOMAIN/privkey.pem;
+    # include /etc/letsencrypt/options-ssl-nginx.conf;
+    # ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # --- Baseline security headers (tune in Phase 10 alongside `helmet` config) ---
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # add_header Content-Security-Policy "TODO: define a real CSP in Phase 10" always;
+
+    # --- SPA static assets (built by `web/`, copied here by the deploy script) ---
+    root /var/www/rejuvenate/app/web/dist; # TODO: confirm real path in Phase 10
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # --- API reverse proxy — Node bound to 127.0.0.1, never exposed directly ---
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000; # TODO: confirm PORT matches api/.env
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+    }
+
+    # --- Uploaded media — served from OUTSIDE the app checkout (see ../README.md) ---
+    # MUST match the api/.env UPLOADS_DIR value exactly.
+    location /media/ {
+        alias /var/www/rejuvenate/uploads/; # TODO: confirm real absolute path
+        # Content-type allow-list + no script execution: only serve known-safe image
+        # types; never execute anything from this directory as a script.
+        # TODO (Phase 10): tighten this to an explicit allow-list of extensions
+        # (jpg/jpeg/png/webp/gif) and confirm `default_type` does not leak execution.
+        location ~* \.(?:php|phtml|pl|py|jsp|asp|aspx|sh|cgi)$ {
+            deny all;
+        }
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+}

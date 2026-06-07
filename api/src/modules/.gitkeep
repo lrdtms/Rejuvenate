@@ -1,0 +1,3 @@
+Feature modules (auth, rbac, blog, events, registrations, cms, media, users) land here
+in later phases, each following the router -> service -> repository layering described
+in architecture.md §6 / §14. Intentionally empty in Phase 0.
