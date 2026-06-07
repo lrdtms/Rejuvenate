@@ -118,7 +118,16 @@ per-module.
 
 ---
 
-## Phase 3 — Auth Module + RBAC Middleware
+## Phase 3 — Auth Module + RBAC Middleware 🔶 IN PROGRESS (started 2026-06-07)
+
+> **Progress so far on `feature/dynamic-rewrite`** — steps 1–2 (session store + password hashing) done and reviewed; steps 3–6 (AuthService, routes, RBAC middleware, ownership helpers) not yet started — paused here by request before dispatching the next task.
+>
+> - ✅ **Step 1 (Session store)**: `modules/auth/session.ts` — `express-session` + `connect-pg-simple` against the Postgres `session` table (per the schema.prisma decision-record / `createTableIfMissing: true`), custom cookie name `rejuvenate.sid`, `cookie.secure` derived explicitly from `NODE_ENV === 'production'` (deliberately not `'auto'` — see file's doc-comment for the proxy-misconfiguration safety argument), `httpOnly`/`sameSite: 'lax'`, rolling idle timeout (`IDLE_TIMEOUT_MS` = 2h) bridged with a custom absolute-max-age ceiling (`ABSOLUTE_MAX_AGE_MS` = 12h via `enforceAbsoluteSessionMaxAge()`, since `express-session` has no native concept of one). Mounted as `router.use(...)` on the `/api/v1` router *after* `/healthz` is registered on the same router — resolving the "`/healthz` must stay reachable without touching the session store" tension via Express's same-router registration-order dispatch (documented inline in `app.ts` at the mount site) rather than any special-casing.
+> - ✅ **Step 2 (Password hashing)**: `modules/auth/password.ts` — `hashPassword`/`verifyPassword` wrapping `argon2`, with EXPLICIT pinned argon2id parameters (`memoryCost: 12_288` / `timeCost: 3` / `parallelism: 1` — OWASP's "much less memory available" profile, sized to a small shared-RAM Linode VPS per architecture.md §11, with the DoS-via-memory-hard-hashing trade-off reasoned through in the file header) rather than library defaults (which can silently change between `argon2` major versions).
+> - ⬜ **Step 3 (`AuthService`)**: `login`/`logout`/`getCurrentUser`, `isActive` enforcement at login AND per-request, account-enumeration-safe password-reset mechanics — not yet started. Note for whoever picks this up: **no `PasswordResetToken` (or similar) model exists yet in `schema.prisma`** — the reset-token mechanism (time-boxed, single-use, per architecture.md §9.3) will need either a small additive migration (recommended — mirror the `session`-table decision-record style for documenting *why* it's modeled the way it is) or an explicitly-justified in-memory alternative; decide and document before/while building this.
+> - ⬜ **Step 4 (Routes)**: `POST /auth/login`, `POST /auth/logout`, `GET /me`, `POST /auth/password-reset/request` + `/confirm` — not yet started.
+> - ⬜ **Step 5 (RBAC middleware)**: `requireAuth()`/`requireRole(...)` in `middleware/rbac.ts`, applied globally to `/api/v1/admin/*` — not yet started.
+> - ⬜ **Step 6 (Ownership helpers)**: `canEditPost(user, post)` as the single source of truth for "Bloggers manage own posts only," plus the symmetric ownership-check pattern for Media uploads (`MediaService.upload` in Phase 4e) — not yet started.
 
 **Goal**: The authentication/authorization spine — nothing protected can be built without it, and it's the first thing the frontend admin area needs to integrate against.
 
