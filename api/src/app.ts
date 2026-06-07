@@ -30,7 +30,9 @@ export function createApp() {
     try {
       await db.$queryRaw`SELECT 1`;
       res.status(200).json({ status: 'ok', db: 'up' });
-    } catch {
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Healthcheck DB query failed:', err);
       res.status(503).json({ status: 'degraded', db: 'down' });
     }
   });
