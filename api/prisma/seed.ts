@@ -119,34 +119,24 @@ async function seedAdminUser(): Promise<void> {
     },
   });
 
+  const banner = [
+    '',
+    '================================================================',
+    '  BOOTSTRAP ADMIN ACCOUNT CREATED — ONE-TIME CREDENTIAL PRINTOUT',
+    '================================================================',
+    `  Email:    ${ADMIN_EMAIL}`,
+    `  Password: ${plaintextPassword}`,
+    '----------------------------------------------------------------',
+    '  CHANGE THIS PASSWORD IMMEDIATELY AFTER YOUR FIRST LOGIN.',
+    '  There is currently NO enforced "must change password on first',
+    '  login" flow — that is planned for Phase 3 (auth module). This',
+    '  printout is your only copy: it is hashed (argon2id) before',
+    '  storage and will not be shown again by this script.',
+    '================================================================',
+    '',
+  ].join('\n');
   // eslint-disable-next-line no-console
-  console.log('');
-  // eslint-disable-next-line no-console
-  console.log('================================================================');
-  // eslint-disable-next-line no-console
-  console.log('  BOOTSTRAP ADMIN ACCOUNT CREATED — ONE-TIME CREDENTIAL PRINTOUT');
-  // eslint-disable-next-line no-console
-  console.log('================================================================');
-  // eslint-disable-next-line no-console
-  console.log(`  Email:    ${ADMIN_EMAIL}`);
-  // eslint-disable-next-line no-console
-  console.log(`  Password: ${plaintextPassword}`);
-  // eslint-disable-next-line no-console
-  console.log('----------------------------------------------------------------');
-  // eslint-disable-next-line no-console
-  console.log('  CHANGE THIS PASSWORD IMMEDIATELY AFTER YOUR FIRST LOGIN.');
-  // eslint-disable-next-line no-console
-  console.log('  There is currently NO enforced "must change password on first');
-  // eslint-disable-next-line no-console
-  console.log('  login" flow — that is planned for Phase 3 (auth module). This');
-  // eslint-disable-next-line no-console
-  console.log('  printout is your only copy: it is hashed (argon2id) before');
-  // eslint-disable-next-line no-console
-  console.log('  storage and will not be shown again by this script.');
-  // eslint-disable-next-line no-console
-  console.log('================================================================');
-  // eslint-disable-next-line no-console
-  console.log('');
+  console.log(banner);
 }
 
 async function seedCmsSlots(): Promise<void> {
