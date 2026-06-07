@@ -100,6 +100,16 @@ Steps:
 
 **Dependency**: blocks every feature module below (they all mount onto this app and use these conventions).
 
+**Shared-Zod-schema-location decision (step 4) — recorded**: schemas are **duplicated per
+module**, not published/shared via a copy-step — `api/src/modules/<module>/<module>.schemas.ts`
+on the backend, hand-mirrored in `web/src/shared/schemas/*.schema.ts` on the frontend (per
+Phase 6's `rsvp.schema.ts` critical file). Rationale (small solo-operator codebase, independent
+`api`/`web` lockfiles with no workspace boundary to slot a shared package into, server is the
+actual validation boundary so drift risk is low and one-line-fixable) is written out in full in
+the doc-comment at the top of `api/src/middleware/validate.ts` — Phase 4 module authors should
+read that comment before creating their first `.schemas.ts` file so this isn't reinvented
+per-module.
+
 **Backend Review Note**: Add `app.set('trust proxy', 1)` (or the appropriate value) as an explicit step here — it's easy to forget, and without it, `express-rate-limit`, `express-session`'s `secure` cookie detection, and any IP-based logic will all silently misbehave behind Nginx. This single line is a recurring source of "rate limiting doesn't work in production but works locally" bugs.
 
 ---
