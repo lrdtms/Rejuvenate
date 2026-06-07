@@ -24,6 +24,7 @@
  *   NotFoundError             |   404  | NOT_FOUND          | notFound(message?)
  *   ConflictError             |   409  | CONFLICT           | conflict(message?)
  *   CapacityExceededError     |   409  | CAPACITY_EXCEEDED  | capacityExceeded(message?)
+ *   RateLimitedError          |   429  | RATE_LIMITED       | tooManyRequests(message?)
  *
  * Note both `ConflictError` and `CapacityExceededError` map to HTTP 409, but carry
  * distinct `code`s — this lets the SPA tell "duplicate/conflicting submission" apart
@@ -98,6 +99,20 @@ export function conflict(message = 'Conflicting request'): AppError {
  */
 export function capacityExceeded(message = 'This event has reached capacity'): AppError {
   return new AppError(409, 'CAPACITY_EXCEEDED', message);
+}
+
+/**
+ * A client exceeded a per-route rate limit (plan.md Phase 2 step 7 — login and RSVP
+ * are the two routes that wire this up, in Phases 3/4 respectively). Maps to HTTP 429
+ * (`Too Many Requests`, RFC 6585) with a dedicated `RATE_LIMITED` code so the SPA can
+ * show a "slow down and try again shortly" message distinct from any other 4xx.
+ *
+ * Used by `middleware/rateLimit.ts`'s custom `handler` to keep the limiter's response
+ * in the same `{ error: { code, message } }` shape as the rest of the API rather than
+ * express-rate-limit's own plain-text/JSON default body.
+ */
+export function tooManyRequests(message = 'Too many requests — please try again later'): AppError {
+  return new AppError(429, 'RATE_LIMITED', message);
 }
 
 /**

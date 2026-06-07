@@ -7,18 +7,24 @@
  * concern by nature.
  *
  * Deliberately NOT covered here (out of scope for this task / better tested
- * elsewhere): helmet header *contents* (library's own test suite covers that)
- * and the /healthz DB check (covered when the auth/db modules land). The error
- * handler *is* covered below — see "request logging" — because its interaction
- * with `pino-http`'s registration order/redaction is the crux of a real defect
- * this suite now guards against (a malformed body bypassing both the access log
- * and the redaction pipeline).
+ * elsewhere): helmet header *contents* (library's own test suite covers that).
+ * The error handler *is* covered below — see "request logging" — because its
+ * interaction with `pino-http`'s registration order/redaction is the crux of a
+ * real defect this suite now guards against (a malformed body bypassing both
+ * the access log and the redaction pipeline).
+ *
+ * The `/healthz` DB-timeout behaviour (plan.md Phase 2 step 5/7) is covered in
+ * its own `describe` block below via `vi.spyOn(db, '$queryRaw')` — see that
+ * block's comment for why spying on the shared Prisma singleton is the right
+ * seam here (no dedicated mocking infrastructure exists yet, and standing one
+ * up purely for one test would be more machinery than the assertion warrants).
  */
 import request from 'supertest';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createApp } from './app';
 import { env } from './config/env';
+import { db } from './lib/db';
 
 describe('createApp() — global middleware (Phase 2)', () => {
   describe('CORS', () => {
@@ -167,6 +173,73 @@ describe('createApp() — global middleware (Phase 2)', () => {
       } finally {
         consoleErrorSpy.mockRestore();
       }
+    });
+  });
+
+  describe('/healthz', () => {
+    // `db` is the shared Prisma singleton imported by `app.ts` (see `lib/db.ts`) — no
+    // real Postgres is required for these assertions, and standing up a test database
+    // purely to prove "a slow query times out" would be solving the wrong problem.
+    // `vi.spyOn` against the singleton's `$queryRaw` method is the narrowest possible
+    // seam: it leaves the rest of `createApp()`'s wiring untouched and is restored
+    // after every test so other suites that exercise `/healthz` (e.g. the CORS checks
+    // above, which hit it as an arbitrary GET target) keep seeing real behaviour.
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('responds 200 {status: "ok", db: "up"} when the DB query succeeds', async () => {
+      vi.spyOn(db, '$queryRaw').mockResolvedValue([{ '?column?': 1 }]);
+
+      const app = createApp();
+      const res = await request(app).get('/api/v1/healthz');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ status: 'ok', db: 'up' });
+    });
+
+    it('responds 503 {status: "degraded", db: "down"} when the DB query rejects', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(db, '$queryRaw').mockRejectedValue(new Error('connection refused'));
+
+      const app = createApp();
+      const res = await request(app).get('/api/v1/healthz');
+
+      expect(res.status).toBe(503);
+      expect(res.body).toEqual({ status: 'degraded', db: 'down' });
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('responds 503 {status: "degraded", db: "down"} within a bounded time when the DB query hangs', async () => {
+      // Regression guard for the exact defect plan.md step 5 calls out: "a /healthz
+      // that always returns 200 regardless of DB state is worse than no health
+      // check" — and symmetrically, a /healthz that *hangs* forever waiting on a
+      // wedged connection is just as useless to deploy tooling/uptime monitors as
+      // one that lies. Stub `$queryRaw` with a promise that never resolves (a
+      // faithful stand-in for a hung connection: the call returns, but its result
+      // never arrives) and assert the route still answers — and answers quickly,
+      // i.e. driven by `HEALTHZ_DB_TIMEOUT_MS`'s race rather than by the stub ever
+      // settling.
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(db, '$queryRaw').mockReturnValue(
+        new Promise(() => {}) as unknown as ReturnType<typeof db.$queryRaw>,
+      );
+
+      const app = createApp();
+
+      const startedAt = Date.now();
+      const res = await request(app).get('/api/v1/healthz');
+      const elapsedMs = Date.now() - startedAt;
+
+      expect(res.status).toBe(503);
+      expect(res.body).toEqual({ status: 'degraded', db: 'down' });
+      // Bounded comfortably above HEALTHZ_DB_TIMEOUT_MS (2_500ms) to absorb test-runner
+      // scheduling jitter, while still proving this resolved via the timeout race
+      // rather than hanging for the test's full default timeout (5s) or longer.
+      expect(elapsedMs).toBeLessThan(4_500);
+
+      consoleErrorSpy.mockRestore();
     });
   });
 });
