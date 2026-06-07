@@ -39,14 +39,22 @@ const HEALTHZ_DB_TIMEOUT_MS = 2_500;
  * Rejects after `HEALTHZ_DB_TIMEOUT_MS` — paired with `db.$queryRaw` in a
  * `Promise.race` so a hung DB connection can't block the `/healthz` response
  * indefinitely (see the constant's doc comment for the chosen bound, and the
- * route handler for why this matters). Deliberately returns a `never`-typed
- * promise (it only ever rejects) so `Promise.race([db.$queryRaw\`...\`, healthzTimeout()])`
- * resolves to the query's result type when the query wins.
+ * route handler for why this matters). Deliberately rejects with a `never`-typed
+ * promise so `Promise.race([db.$queryRaw\`...\`, healthzTimeout().promise])` resolves
+ * to the query's result type when the query wins.
+ *
+ * Returns `{ promise, cancel }` rather than a bare promise: when the query wins
+ * the race, the timer is still pending (it'll fire ~2.5s later regardless). The
+ * route handler calls `cancel()` in a `finally` so a healthy, frequently-polled
+ * endpoint (uptime monitors typically hit `/healthz` every few seconds to a
+ * minute) doesn't accumulate one dangling `setTimeout` per request.
  */
-function healthzTimeout(): Promise<never> {
-  return new Promise((_resolve, reject) => {
-    setTimeout(() => reject(new Error('Healthcheck DB query timed out')), HEALTHZ_DB_TIMEOUT_MS);
+function healthzTimeout(): { promise: Promise<never>; cancel: () => void } {
+  let timer: ReturnType<typeof setTimeout>;
+  const promise = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error('Healthcheck DB query timed out')), HEALTHZ_DB_TIMEOUT_MS);
   });
+  return { promise, cancel: () => clearTimeout(timer) };
 }
 
 /**
@@ -146,13 +154,18 @@ export function createApp(options: CreateAppOptions = {}) {
    * the outside regardless of which is actually true.
    */
   router.get('/healthz', async (_req: Request, res: Response) => {
+    const timeout = healthzTimeout();
     try {
-      await Promise.race([db.$queryRaw`SELECT 1`, healthzTimeout()]);
+      await Promise.race([db.$queryRaw`SELECT 1`, timeout.promise]);
       res.status(200).json({ status: 'ok', db: 'up' });
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Healthcheck DB query failed:', err);
       res.status(503).json({ status: 'degraded', db: 'down' });
+    } finally {
+      // Whichever side of the race settled first, the other is now moot — clear
+      // the timer so it doesn't fire ~2.5s later for no reason (see `healthzTimeout`).
+      timeout.cancel();
     }
   });
 
