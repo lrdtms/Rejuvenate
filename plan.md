@@ -554,7 +554,140 @@ Build in this order because each has increasing dependency depth (Blog needs onl
 4. Admin routes: full CRUD gated `requireRole('ADMIN','EVENT_MANAGER')`.
    - Define the allowed `status` transition graph explicitly (e.g., `DRAFT → PUBLISHED → CANCELLED`, can a `CANCELLED` event be reopened? can a `PUBLISHED` event revert to `DRAFT` if it already has registrations?) — and decide what happens to **existing registrations** when an event is cancelled or its `startsAt` is moved to the past/changed materially (notify registrants? no mechanism exists for that without the email integration — at minimum, the admin UI should warn "this event has N registrations" before a destructive status change or date change). This is an edge case the architecture doesn't spell out and is exactly the kind of thing that surprises an Event Manager in production.
 
-### 4c. Registration Module (depends on 4b)
+### 4c. Registration Module ✅ COMPLETED (2026-06-08)
+
+> **Done on `feature/dynamic-rewrite`** — repository, service, router, schemas,
+> and constants all built, wired into `app.ts`, and verified clean against
+> `typecheck`/`lint`/`test`/`build` (285/285 tests passing across the whole
+> suite, including 39 new Registrations-module tests across
+> `registrations.service.test.ts` (20) and `registrations.router.test.ts` (19)).
+>
+> - ✅ **`registerAttendee` eligibility + two-layer capacity check** (steps 3
+>   and 4's "capacity-check ordering matters" note): `RegistrationService.
+>   registerAttendee` confirms the event is `PUBLISHED` and not yet started via
+>   `EventService.getPublishedBySlug` (collapsing not-found/not-published per
+>   the established anti-enumeration convention), THEN delegates to
+>   `EventService.tryRegisterWithCapacityCheck` — which itself performs the
+>   documented "fast pre-check, then atomic `tryRegisterAtomically` guarantee"
+>   two-layer sequence built in Phase 4b specifically for this call site.
+>   `{ inserted: false }` is translated to `capacityExceeded()` at the
+>   `EventService` boundary (not re-derived here) — exactly ONE place owns the
+>   capacity guarantee, end to end.
+> - ✅ **The soft `(eventId, email, firstName, surname)` duplicate-guard, with
+>   a CONCRETE named window** (step 3's "don't leave 'short window' as an
+>   undefined magic constant" instruction): `DUPLICATE_GUARD_WINDOW_MINUTES =
+>   5` in `registrations.constants.ts`, with an extensive doc-comment recording
+>   BOTH the match-key reasoning (the full 4-field tuple, NOT email-alone — an
+>   email may legitimately register a companion under a different name, per
+>   the Backend Review Note immediately below the plan's step list) and the
+>   window-length reasoning (long enough to catch a double-click/back-button
+>   resubmit, short enough that it can never block a genuine same-household
+>   second registration). A plain advisory `findFirst` (NOT a transactional
+>   guarantee — a deliberate choice, since this is a soft UX guard, not an
+>   invariant; see `registrations.repository.ts`'s "DUPLICATE-GUARD" doc-comment
+>   for why a TOCTOU race here is acceptable, unlike capacity).
+> - ✅ **`age` validated as an integer 0–120, surfaced via `{ fields: { age:
+>   [...] } }`** (step 3's named POPIA control #8 requirement):
+>   `createRegistrationSchema` in `registrations.schemas.ts` —
+>   `z.number().int().min(MIN_AGE).max(MAX_AGE)` with `MIN_AGE = 0`/
+>   `MAX_AGE = 120` named constants; verified at the actual VALIDATION BOUNDARY
+>   in `registrations.router.test.ts` (0 and 120 accepted; -1, 121, and 30.5
+>   each rejected with a 400 naming the `age` field specifically).
+> - ✅ **POPIA placeholder wiring — `consentVersion` + `retainUntil`**
+>   (step 1's "go-live blocker, but doesn't block building the submission
+>   flow" guidance): `CONSENT_VERSION_PLACEHOLDER =
+>   'consent-notice-DRAFT-v0-PENDING-LEGAL-SIGNOFF'` and
+>   `retainUntilPlaceholder()` (returns `null`, not a guessed default — see
+>   that function's doc-comment for why guessing would be WORSE than an honest
+>   `null`: a wrong guess silently bakes an unconfirmed retention period into
+>   real personal-data rows, while `null` makes "this still needs a stakeholder
+>   decision" structurally visible in the data itself). Both are named, single-
+>   sourced constants in `registrations.constants.ts`, each documented as
+>   "PLACEHOLDER — pending stakeholder/legal sign-off," so the Phase 9 retention
+>   work is purely a content/config change, never a re-architecture — exactly
+>   the shape step 1 asked for.
+> - ✅ **Honeypot bot-defense — silently accept-and-discard, documented choice**
+>   (step 4's "honeypot/bot-defended" requirement, and architecture.md §12's
+>   "lightweight bot defense on RSVP"): `createRegistrationSchema`'s optional
+>   `honeypot` field is checked FIRST in `registerAttendee`, before any DB
+>   read — a filled honeypot short-circuits to `{ registered: true }` (the
+>   IDENTICAL success shape a genuine submission gets) without persisting
+>   anything or consuming a capacity slot. Chosen over a loud rejection
+>   specifically so a bot never learns WHICH field tripped the trap (a 400
+>   naming `honeypot` would be a free signal to iterate against); see
+>   `createRegistrationSchema`'s doc-comment for the full reasoning record.
+>   Verified in `registrations.service.test.ts` (discarded silently, doesn't
+>   consume capacity) and `registrations.router.test.ts` (200-shaped response,
+>   nothing persisted).
+> - ✅ **Rate-limiting** (architecture.md §12's "rate-limit the public RSVP and
+>   login endpoints"): `RSVP_RATE_LIMIT = { windowMs: 10 * 60_000, max: 20 }`
+>   in `registrations.router.ts` — deliberately LOOSER than `auth.router.ts`'s
+>   `LOGIN_RATE_LIMIT`, with an extensive doc-comment recording WHY (RSVP's
+>   legitimate-traffic shape is genuinely burstier — shared-household/shared-
+>   IP group sign-ups after an event announcement — and login's tight,
+>   credential-stuffing-tuned budget would actively lock out exactly the
+>   legitimate burst this feature exists to handle).
+> - ✅ **Staff routes gated `requireRole(authService, 'ADMIN', 'EVENT_MANAGER')`**
+>   (step 5 + architecture.md §12's "restrict registration data reads/exports
+>   to Admin + Event Manager"): `requireRegistrationStaff` is the SINGLE shared
+>   gate for both `GET /admin/events/:id/registrations` and the CSV export —
+>   no per-resource ownership check on top (mirrors the Phase 4b "EVENT-MANAGER
+>   OWNERSHIP — any Event Manager may manage any event" decision; existence/
+>   visibility is delegated to `EventService.getForAdmin`, which performs no
+>   ownership gate of its own). Verified via the full RBAC decision-matrix
+>   (anonymous → 401, Blogger → 403, Event Manager → 200, Admin → 200).
+> - ✅ **CSV export — a REAL CSV-writing library, correct headers, RFC 4180
+>   escaping** (step 5's "use a real CSV-writing library, not string-templating
+>   rows" instruction): added `csv-stringify@^6` as a dependency (confirmed
+>   absent beforehand) and used `csv-stringify/sync`'s `stringify(rows,
+>   { columns: [{ key, header }, ...], header: true })` form — the correct API
+>   (an initial attempt at a `columns_header_record` option was tried, found to
+>   not exist, and corrected after empirically verifying the real shape via a
+>   throwaway `node -e` probe). `Content-Type: text/csv; charset=utf-8` and
+>   `Content-Disposition: attachment; filename="registrations-<slugified-title>-
+>   <date>.csv"` are both set explicitly. Verified in `registrations.router.
+>   test.ts` with adversarial real-shaped personal-name inputs — `Sam "Sammy"`
+>   (embedded quote) and `Smith, Jr.` (embedded comma) — proving the file opens
+>   correctly rather than corrupting column boundaries the way naive
+>   `row.join(',')` string-templating would.
+> - ✅ **Per-export structured audit log entry** (step 5's "the audit-log entry
+>   is not optional-nice-to-have, treat it as a v1 requirement" instruction —
+>   see the flagged open AuditLog-table question below): `RegistrationService.
+>   exportForEvent` logs `{ event: 'registration_export', actorId, actorEmail,
+>   actorRole, eventId, eventTitle, registrationCount, exportedAt }` via the
+>   shared `pino` logger injected through the same `{ db, ..., logger }`
+>   factory-options shape `AuthService` already established — capturing every
+>   field architecture.md §12.1.6 names ("who exported, when, which event").
+>
+> **Open decision flagged for stakeholder/cross-module confirmation — the
+> `AuditLog` table question** (cross-cutting with Phase 4f, NOT solved
+> unilaterally here): plan.md's own step 5 and the Phase 4f note (line 598-599)
+> both raise "does this need a structured `AuditLog` DB table, or does
+> structured logging suffice?" `exportForEvent` ships with the LATTER —
+> structured `pino` log entries carrying every field §12.1.6 names — for three
+> reasons recorded in full in that method's doc-comment: (1) it satisfies the
+> literal requirement ("audited") without a schema change on a pre-launch
+> database; (2) a real `AuditLog` table is explicitly flagged in the plan as
+> better decided ONCE, centrally (line 599's "Recommend deciding this in Phase
+> 1... A minimal generic shape... could serve both the role-change [4f] and
+> CSV-export [4c] use cases with one table" — building a 4c-only ad-hoc version
+> now would risk exactly the kind of drift that note warns against); (3) it
+> keeps this phase's migration footprint at zero, consistent with "don't hand-
+> edit / don't add speculative schema." If the team decides a queryable,
+> retained, structured `AuditLog` table IS wanted, `exportForEvent`'s logging
+> call is a narrow, isolated, additive change to swap — the log-statement shape
+> already mirrors the exact field set such a table's rows would need.
+>
+> **Critical files**:
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\registrations\registrations.repository.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\registrations\registrations.service.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\registrations\registrations.router.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\registrations\registrations.schemas.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\registrations\registrations.constants.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\registrations\registrations.service.test.ts` (incl. the GENUINE `Promise.all` concurrency proof through the full service stack — see file header for why re-proving Phase 4b's guarantee here is not redundant)
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\registrations\registrations.router.test.ts`
+
+(depends on 4b)
 1. **Open question to resolve before/while building this**: *POPIA retention period and consent-notice wording* — flagged as a **go-live blocker**, but it does NOT block building the *submission* flow (the `consentVersion` field just needs *a* version string and *a* notice to display — even a placeholder draft can be wired now and swapped when the organization confirms wording). It DOES block:
    - Setting a real `retainUntil` value on creation (use a placeholder/null until the period is confirmed, OR pick a conservative default and document it as provisional).
    - Building the purge job (defer that piece to **Phase 9** explicitly — the original draft of this note said "Phase 7," which is the frontend admin-shell phase and clearly wrong; corrected to Phase 9, the dedicated POPIA-completion phase).
