@@ -32,6 +32,9 @@ import { createSessionMiddleware, enforceAbsoluteSessionMaxAge } from './modules
 import { createBlogRepository } from './modules/blog/blog.repository';
 import { createBlogRouter } from './modules/blog/blog.router';
 import { createBlogService } from './modules/blog/blog.service';
+import { createEventRepository } from './modules/events/events.repository';
+import { createEventRouter } from './modules/events/events.router';
+import { createEventService } from './modules/events/events.service';
 
 /**
  * Upper bound on how long `/healthz` will wait for `SELECT 1` before treating the
@@ -276,6 +279,22 @@ export function createApp(options: CreateAppOptions = {}) {
   const blogRepository = createBlogRepository({ db });
   const blogService = createBlogService({ repository: blogRepository });
   router.use(createBlogRouter({ authService, blogService }));
+
+  // ---------------------------------------------------------------------------
+  // Events module (plan.md Phase 4b) — mounted AFTER Blog, in the same
+  // dependency-ordered sequence plan.md Phase 4's intro names ("Blog needs
+  // only User; Events needs User"). Same composition-root posture as Blog:
+  // construct the repository -> service chain (wiring in the shared Prisma
+  // client) and hand the assembled `EventService` (alongside `authService`,
+  // for `requireRole`/`requireAuth` gates) to `createEventRouter`. The
+  // constructed `eventService` is ALSO the home of the capacity-check
+  // primitive (`tryRegisterWithCapacityCheck` — see
+  // `modules/events/events.service.ts`'s extensive doc-comment) that Phase
+  // 4c's `RegistrationService` will receive via the identical DI pattern
+  // once that module exists.
+  const eventRepository = createEventRepository({ db });
+  const eventService = createEventService({ repository: eventRepository });
+  router.use(createEventRouter({ authService, eventService }));
 
   // Test-only seam (see `CreateAppOptions` doc comment above) — registered before
   // the catch-all 404 handler so probe routes are actually reachable. Runs AFTER
