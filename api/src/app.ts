@@ -19,11 +19,15 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import helmet from 'helmet';
+import { pino } from 'pino';
 import { pinoHttp } from 'pino-http';
 
 import { env } from './config/env';
 import { db } from './lib/db';
 import { AppError } from './lib/errors';
+import { createAuthRouter } from './modules/auth/auth.router';
+import { createAuthService } from './modules/auth/auth.service';
+import { ConsoleMailService } from './modules/auth/mail.service';
 import { createSessionMiddleware, enforceAbsoluteSessionMaxAge } from './modules/auth/session';
 
 /**
@@ -61,7 +65,10 @@ const HEALTHZ_DB_TIMEOUT_MS = 2_500;
 function healthzTimeout(): { promise: Promise<never>; cancel: () => void } {
   let timer: ReturnType<typeof setTimeout>;
   const promise = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error('Healthcheck DB query timed out')), HEALTHZ_DB_TIMEOUT_MS);
+    timer = setTimeout(
+      () => reject(new Error('Healthcheck DB query timed out')),
+      HEALTHZ_DB_TIMEOUT_MS,
+    );
   });
   return { promise, cancel: () => clearTimeout(timer) };
 }
@@ -113,18 +120,34 @@ export function createApp(options: CreateAppOptions = {}) {
   // credentials, and logging them wholesale would itself be a compliance violation.
   // `pino-http`'s default request/response serializers only emit method, url,
   // status code, and the standard non-sensitive headers — never `req.body`.
+  //
+  // `rootLogger` is constructed explicitly (rather than letting `pino-http`
+  // build its own internal instance, as the Phase 2 version of this file did)
+  // so Phase 3's `AuthService`/`MailService` (and any future module-level
+  // service that needs to log) can share the EXACT SAME instance — same
+  // level, same redaction config — that `req.log` is derived from, via
+  // `pinoHttp({ logger: rootLogger, ... })` below. One logger, one redaction
+  // policy, no risk of a second hand-rolled `pino()` instance drifting from
+  // the carefully-considered `redact`/`level` settings here (e.g. someone
+  // building a service-level logger that forgets to redact `cookie`/
+  // `authorization` and accidentally reintroduces the exact POPIA/credential-
+  // leak risk this configuration exists to close).
+  const rootLogger = pino({
+    level: env.NODE_ENV === 'test' ? 'silent' : 'info',
+    redact: {
+      paths: ['req.headers.cookie', 'req.headers.authorization', 'res.headers["set-cookie"]'],
+      remove: true,
+    },
+  });
+
   app.use(
     pinoHttp({
-      level: env.NODE_ENV === 'test' ? 'silent' : 'info',
+      logger: rootLogger,
       // Keep noise down: uptime monitors hit /healthz frequently and its result
       // carries no diagnostic value beyond "DB up/down" (already logged separately
       // by the handler on failure).
       autoLogging: {
         ignore: (req) => req.url === '/api/v1/healthz',
-      },
-      redact: {
-        paths: ['req.headers.cookie', 'req.headers.authorization', 'res.headers["set-cookie"]'],
-        remove: true,
       },
     }),
   );
@@ -216,6 +239,24 @@ export function createApp(options: CreateAppOptions = {}) {
   // populates `req.session` (see `modules/auth/session.ts` for the full
   // rolling-vs-absolute rationale and chosen TTL values).
   router.use(enforceAbsoluteSessionMaxAge());
+
+  // ---------------------------------------------------------------------------
+  // Auth module (plan.md Phase 3 steps 3-4) — mounted AFTER sessions, since
+  // every route it exposes (`/auth/login`, `/auth/logout`, `/me`,
+  // `/auth/password-reset/*`) reads or writes `req.session`. `app.ts` is the
+  // composition root: it constructs the shared `AuthService` (wiring in the
+  // shared Prisma client, a `ConsoleMailService` — see that file's header for
+  // why this is the only `MailService` implementation that exists today and
+  // the open question blocking a real one — and a child logger) and hands it
+  // to `createAuthRouter`, mirroring the `mountForTesting` seam's "inject
+  // dependencies, don't reach for module-level singletons" posture so the
+  // whole chain stays substitutable in tests.
+  const authService = createAuthService({
+    db,
+    mailService: new ConsoleMailService(rootLogger),
+    logger: rootLogger,
+  });
+  router.use(createAuthRouter({ authService }));
 
   // Test-only seam (see `CreateAppOptions` doc comment above) — registered before
   // the catch-all 404 handler so probe routes are actually reachable. Runs AFTER
