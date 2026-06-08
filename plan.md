@@ -704,7 +704,118 @@ Build in this order because each has increasing dependency depth (Blog needs onl
 
 **Backend Review Note (cross-cutting for 4b/4c)**: Add a `@@unique([eventId, email])`-style constraint to the schema **only if** the duplicate-guard is meant to be a hard rule — the architecture explicitly says it's a *soft* guard (the same email may legitimately register a companion under a different name), so do NOT add a DB-level unique constraint on `(eventId, email)` alone. This is worth saying explicitly in the plan so nobody "helpfully" adds a unique index during Phase 1 schema review that then has to be migrated away after it breaks a legitimate multi-registration.
 
-### 4d. CMS Module (depends on User for `lastEditedBy`)
+### 4d. CMS Module ✅ COMPLETED (2026-06-08)
+
+> **Done on `feature/dynamic-rewrite`** — slot registry, repository, service,
+> router, schemas, and constants all built, wired into `app.ts`, and verified
+> clean against `typecheck`/`lint`/`test`/`build` (322/322 tests passing
+> across the whole suite, including 37 new CMS-module tests across
+> `cms.slots.test.ts` (8), `cms.service.test.ts` (15), and
+> `cms.router.test.ts` (14)).
+>
+> - ✅ **Slot registry — the "single most important file for ADR-0007
+>   compliance"** (step 1): `cms.slots.ts` exports a fixed, `readonly`
+>   `CMS_SLOTS` const array containing exactly the six seeded slots
+>   (`about.card.who-are-we`, `about.card.what-we-do`,
+>   `about.card.get-involved`, `contact.capeTown.card`,
+>   `contact.durban.card`, `contact.page.details` — all currently
+>   `PLAIN_TEXT`), plus `findRegisteredSlot`/`isRegisteredSlot` lookup
+>   helpers — the single source of truth `CmsService.updateSlot` checks
+>   every write against, with unknown keys rejected via the existing
+>   `unknownSlot()` factory from `lib/errors.ts` (no hand-rolled error
+>   type). **Flagged, accepted-risk decision**: this registry and
+>   `prisma/seed.ts`'s parallel `CMS_SLOTS` list remain two separate,
+>   human-maintained lists rather than one importing the other — the file's
+>   header explains in full why a runtime import in either direction would
+>   be a layering inversion (the seed runs via `tsx` outside compiled
+>   output and is typed against `@prisma/client` enums; reaching from
+>   `src/` into `prisma/` or vice versa recreates the exact cross-layer
+>   edge ADR-0001's module boundaries exist to prevent). The mitigation is
+>   a dedicated **registry/seed parity test** in `cms.slots.test.ts` that
+>   reads `prisma/seed.ts`'s SOURCE TEXT (not a runtime import) and
+>   regex-extracts its `CMS_SLOTS` entries, then asserts both lists
+>   describe the identical `slotKey` set with identical `format`s — so any
+>   future edit to one list without the other fails loudly in `npm test`.
+> - ✅ **`getSlot`/`getSlots`/`updateSlot`** (step 2): `CmsService` rejects
+>   writes to unregistered `slotKey`s via `unknownSlot()`, sanitizes
+>   format-aware (RICH_TEXT through `sanitizeCmsRichText`/
+>   `CMS_RICH_TEXT_ALLOW_LIST` from `lib/sanitizeHtml.ts`; PLAIN_TEXT stored
+>   AS-IS — never double-sanitized, since the frontend escapes on render),
+>   and stamps `lastEditedById` from the authenticated editor on every
+>   write. **The "registered-but-unpopulated slot" contract — DECIDED per
+>   the plan's own recommendation**: `getSlot` returns a safe empty-string
+>   default (`{ slotKey, format: <from registry>, value: '', updatedAt:
+>   null }` — `updatedAt: null` an honest "never written" signal) rather
+>   than 404/throw, for ANY registered slot lacking a row (immediately
+>   post-migration, or a newly-registered slot whose seed hasn't shipped
+>   yet) — the public read path NEVER hard-errors on this condition.
+> - ✅ **Batched public endpoint — `GET /cms?keys=a,b,c` returns a MAP**
+>   (step 3, resolving the Frontend Review Note verbatim): `CmsService.
+>   getSlots` returns `Record<slotKey, CmsSlotView>` (not an array), and
+>   guarantees **every requested, IN-REGISTRY key is present** in the
+>   response (filling unpopulated ones with the same safe-empty default
+>   `getSlot` uses) — exactly the "renderer never special-cases a missing
+>   key" contract the frontend asked for, serving both the public About/
+>   Contact pages (one batched call) and the admin `SlotEditor` (a 1-key
+>   batch, reusing the identical shape).
+>   **Out-of-registry batch-key handling — DECIDED: silently omit.** Three
+>   options were weighed in `getSlots`'s doc-comment (400 the whole
+>   request / include with an error marker / silently omit); silent
+>   omission was chosen because it keeps the map contract uniform for
+>   well-formed requests, degrades exactly like the existing `CmsSlot`
+>   frontend fallback-heading behavior already handles, and treats an
+>   out-of-registry key as a dev/deploy-coordination defect (not a runtime
+>   data problem) that the registry/seed parity test and manual QA already
+>   catch — without forcing every anonymous page-view to pay for a
+>   request-rejecting code path over a bug only developers can fix.
+> - ✅ **Response caching — DECIDED: skip the in-memory TTL cache, document
+>   `Cache-Control` via Nginx as the fast-follow** (step 3's "good
+>   candidate for short server-side response caching"): `cms.service.ts`'s
+>   file header records the YAGNI rationale in full — this is a six-row
+>   table Postgres serves in well under a millisecond; an in-memory TTL
+>   cache adds real invalidation-correctness surface (every `updateSlot`
+>   would need to evict precisely) AND a cross-process staleness hazard
+>   once PM2 runs in cluster mode (each worker would cache independently);
+>   and admin-initiated content edits are rare enough that Postgres's own
+>   buffer cache already absorbs the "hit on every page view" cost for
+>   free. If load ever justifies it, `Cache-Control` headers terminated at
+>   Nginx (architecture.md §11's reverse-proxy layer) is the documented,
+>   lower-risk lever to pull first.
+> - ✅ **Admin routes gated `requireRole(authService, 'ADMIN')` ONLY — no
+>   staff-role escape hatch, no ownership check** (step 4, confirmed against
+>   the RBAC matrix): unlike `/admin/blog/*`/`/admin/events/*` (reachable by
+>   `BLOGGER`/`EVENT_MANAGER` respectively, often plus an ownership check),
+>   `/admin/cms/*` is the deliberate exception to both patterns —
+>   `cms.router.ts`'s doc-comment explains why: `CMSContent` is sitewide
+>   branding/contact copy with no "author" concept (`lastEditedById` is
+>   attribution/audit metadata, not an access-control field), so `ADMIN`
+>   alone is both necessary and sufficient; there is no narrower "may this
+>   Admin touch this slot" question to ask.
+> - ✅ **`GET /admin/cms/:slotKey` reuses `getSlot` (not `getSlots`) —
+>   deliberately precise `unknownSlot()` for operators**: the admin
+>   single-slot read path throws a precise, named error for an
+>   out-of-registry key — the CORRECT behavior for an authenticated Admin
+>   who can act on "that slotKey doesn't exist" (very plausibly a typo),
+>   categorically different from the public batch endpoint's "silently
+>   degrade" contract that exists specifically to protect anonymous
+>   visitors from a developer-side drift they have no way to act on. The
+>   two behaviors are not contradictory — they're the right call for each
+>   audience, documented side-by-side in both the service's and router's
+>   doc-comments.
+>
+> **Critical files**:
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\cms\cms.slots.ts` (the registry — single source of truth for ADR-0007 compliance)
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\cms\cms.constants.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\cms\cms.schemas.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\cms\cms.repository.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\cms\cms.service.ts` (the safe-empty-default contract, out-of-registry batch-key decision, and no-cache rationale all live in this file's doc-comments)
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\cms\cms.router.ts` (the ADMIN-only RBAC rationale and `getSlot`-vs-`getSlots` admin/public asymmetry rationale live here)
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\cms\cms.slots.test.ts` (incl. the registry/seed source-text parity test)
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\cms\cms.service.test.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\cms\cms.router.test.ts`
+
+(original planning notes retained below for reference)
+
 1. **Slot registry**: a developer-defined, fixed list of valid `slotKey`s (a TypeScript const array/enum mirroring the seeded rows from Phase 1) — the single source of truth the service checks writes against (architecture.md §7.3.8, ADR-0007).
 2. Service: `getSlot(slotKey)`, `updateSlot(slotKey, value, editor)` — rejects unknown keys (`UnknownSlotError`), sanitizes per `format` (plainText: escape on render; richText: server-side allow-list sanitization, e.g., via `sanitize-html` with a tiny allow-list — bold/italic/line breaks only, per architecture.md §9.5).
    - Decide what `getSlot` returns for a `slotKey` that is in the registry but has **no row yet** (e.g., immediately post-migration before the seed runs, or if a new slot is added to the registry but the seed/migration to create its row hasn't shipped) — return a typed "empty" value vs. 404 vs. throw. The public pages (Phase 6) need a defined contract here so they don't render `undefined`/crash on a missing slot. Recommend: the registry and the seed are committed together in the same change, AND `getSlot` returns a safe empty-string default for a registered-but-unpopulated slot (never a hard error on the public read path).
