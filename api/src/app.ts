@@ -35,6 +35,9 @@ import { createBlogService } from './modules/blog/blog.service';
 import { createEventRepository } from './modules/events/events.repository';
 import { createEventRouter } from './modules/events/events.router';
 import { createEventService } from './modules/events/events.service';
+import { createRegistrationRepository } from './modules/registrations/registrations.repository';
+import { createRegistrationRouter } from './modules/registrations/registrations.router';
+import { createRegistrationService } from './modules/registrations/registrations.service';
 
 /**
  * Upper bound on how long `/healthz` will wait for `SELECT 1` before treating the
@@ -295,6 +298,31 @@ export function createApp(options: CreateAppOptions = {}) {
   const eventRepository = createEventRepository({ db });
   const eventService = createEventService({ repository: eventRepository });
   router.use(createEventRouter({ authService, eventService }));
+
+  // ---------------------------------------------------------------------------
+  // Registrations module (plan.md Phase 4c) — mounted AFTER Events, the module
+  // it depends on (the public RSVP route resolves eligibility through
+  // `EventService.getPublishedBySlug` and the race-safe capacity guarantee
+  // through `EventService.tryRegisterWithCapacityCheck` — see
+  // `modules/registrations/registrations.service.ts`'s file-header "THE CALL
+  // CHAIN" note for the full call graph this module relies on, built and
+  // exhaustively concurrency-tested in Phase 4b specifically so this module
+  // could call straight into it). Same composition-root posture as every
+  // other module: construct the repository -> service chain (wiring in the
+  // shared Prisma client, the already-constructed `eventService`, and
+  // `rootLogger` for the export-audit log entries — see that service's
+  // `exportForEvent` doc-comment for the "structured pino logging vs.
+  // AuditLog table" decision record) and hand the assembled
+  // `RegistrationService` (alongside `authService`, for `requireRole` gates)
+  // to `createRegistrationRouter`.
+  // ---------------------------------------------------------------------------
+  const registrationRepository = createRegistrationRepository({ db });
+  const registrationService = createRegistrationService({
+    eventService,
+    repository: registrationRepository,
+    logger: rootLogger,
+  });
+  router.use(createRegistrationRouter({ authService, registrationService }));
 
   // Test-only seam (see `CreateAppOptions` doc comment above) — registered before
   // the catch-all 404 handler so probe routes are actually reachable. Runs AFTER
