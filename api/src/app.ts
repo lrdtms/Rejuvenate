@@ -29,6 +29,9 @@ import { createAuthRouter } from './modules/auth/auth.router';
 import { createAuthService } from './modules/auth/auth.service';
 import { ConsoleMailService } from './modules/auth/mail.service';
 import { createSessionMiddleware, enforceAbsoluteSessionMaxAge } from './modules/auth/session';
+import { createBlogRepository } from './modules/blog/blog.repository';
+import { createBlogRouter } from './modules/blog/blog.router';
+import { createBlogService } from './modules/blog/blog.service';
 
 /**
  * Upper bound on how long `/healthz` will wait for `SELECT 1` before treating the
@@ -257,6 +260,22 @@ export function createApp(options: CreateAppOptions = {}) {
     logger: rootLogger,
   });
   router.use(createAuthRouter({ authService }));
+
+  // ---------------------------------------------------------------------------
+  // Blog module (plan.md Phase 4a) — mounted AFTER sessions/auth, since its
+  // `/admin/blog/*` routes are gated by `requireRole(authService, ...)`
+  // (reads `req.session` via the shared `loadAuthenticatedUser` primitive —
+  // see `middleware/rbac.ts`) and its public `/blog/posts*` routes need no
+  // session at all but are harmless to mount alongside. `app.ts` remains the
+  // composition root: it constructs the repository -> service chain (wiring
+  // in the shared Prisma client) and hands the assembled `BlogService`
+  // (alongside the already-constructed `authService`, for the router's
+  // `requireRole`/`requireAuth` gates) to `createBlogRouter` — mirroring the
+  // exact "inject dependencies, don't reach for module-level singletons"
+  // posture the auth module established.
+  const blogRepository = createBlogRepository({ db });
+  const blogService = createBlogService({ repository: blogRepository });
+  router.use(createBlogRouter({ authService, blogService }));
 
   // Test-only seam (see `CreateAppOptions` doc comment above) — registered before
   // the catch-all 404 handler so probe routes are actually reachable. Runs AFTER
