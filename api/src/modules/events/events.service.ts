@@ -467,9 +467,15 @@ export interface EventService {
    *      `INSERT` attempt that the database will reject anyway.
    *   2. THE ATOMIC, RACE-SAFE GUARANTEE: delegates to
    *      `repository.tryRegisterAtomically` — see that method's extensive
-   *      doc-comment in `events.repository.ts` for the full "why a single
-   *      `INSERT ... SELECT ... WHERE count < capacity` SQL statement, not
-   *      a `Serializable` transaction + retry-on-`40001`" decision record.
+   *      doc-comment in `events.repository.ts` for the full "why
+   *      `SELECT ... FOR UPDATE` row-level locking inside an interactive
+   *      `db.$transaction`, not a single `INSERT ... SELECT ... WHERE count
+   *      < capacity` statement" decision record — the latter LOOKS atomic
+   *      but is provably broken under Postgres `READ COMMITTED` (each
+   *      concurrent transaction's `SELECT` sees a stale pre-insert count via
+   *      its own MVCC snapshot, letting every concurrent attempt "see room"
+   *      and insert; the genuine `Promise.all` concurrency test in
+   *      `events.repository.test.ts` is what caught this in Phase 4b).
    *      Translates `{ inserted: false }` into `capacityExceeded()` — the
    *      ONE place that translation happens, so `RegistrationService` never
    *      has to know the primitive's raw `{ inserted, id? }` shape; it
