@@ -32,6 +32,9 @@ import { createSessionMiddleware, enforceAbsoluteSessionMaxAge } from './modules
 import { createBlogRepository } from './modules/blog/blog.repository';
 import { createBlogRouter } from './modules/blog/blog.router';
 import { createBlogService } from './modules/blog/blog.service';
+import { createCmsRepository } from './modules/cms/cms.repository';
+import { createCmsRouter } from './modules/cms/cms.router';
+import { createCmsService } from './modules/cms/cms.service';
 import { createEventRepository } from './modules/events/events.repository';
 import { createEventRouter } from './modules/events/events.router';
 import { createEventService } from './modules/events/events.service';
@@ -323,6 +326,28 @@ export function createApp(options: CreateAppOptions = {}) {
     logger: rootLogger,
   });
   router.use(createRegistrationRouter({ authService, registrationService }));
+
+  // ---------------------------------------------------------------------------
+  // CMS module (plan.md Phase 4d) — depends only on `User` (for
+  // `lastEditedBy` attribution), so it has no ordering dependency on
+  // Blog/Events/Registrations beyond "mount after sessions/auth exist" (its
+  // `/admin/cms/*` routes are gated by `requireRole(authService, 'ADMIN')`,
+  // which reads `req.session` via the shared `loadAuthenticatedUser`
+  // primitive — see `middleware/rbac.ts`). Mounted last among the content
+  // modules purely as a matter of this file's narrative ordering (Blog ->
+  // Events -> Registrations -> CMS mirrors plan.md Phase 4's own a/b/c/d
+  // lettering); Express route resolution is registration-order-sensitive
+  // only for OVERLAPPING paths, and `/cms*`/`/admin/cms/*` overlap with
+  // nothing any earlier module registers. Same composition-root posture as
+  // every other module: construct the repository -> service chain (wiring
+  // in the shared Prisma client) and hand the assembled `CmsService`
+  // (alongside `authService`, for the `requireRole(authService, 'ADMIN')`
+  // gate — see `cms.router.ts`'s "why ADMIN-only, no ownership check" note)
+  // to `createCmsRouter`.
+  // ---------------------------------------------------------------------------
+  const cmsRepository = createCmsRepository({ db });
+  const cmsService = createCmsService({ repository: cmsRepository });
+  router.use(createCmsRouter({ authService, cmsService }));
 
   // Test-only seam (see `CreateAppOptions` doc comment above) — registered before
   // the catch-all 404 handler so probe routes are actually reachable. Runs AFTER
