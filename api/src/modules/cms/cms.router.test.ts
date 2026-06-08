@@ -38,9 +38,37 @@ import { CMS_SLOTS } from './cms.slots';
 const CMS_ROUTER_TEST_TIMEOUT_MS = 20_000;
 const TEST_PASSWORD = 'correct horse battery staple cms 42';
 
-const PLAIN_TEXT_SLOT_KEY = 'about.card.who-are-we';
+// -----------------------------------------------------------------------------
+// Slot-key choices are DELIBERATELY DISJOINT from `cms.service.test.ts`'s
+// mutating fixtures — both suites run as SEPARATE TEST FILES, which Vitest by
+// default executes in PARALLEL (separate processes) against the SAME shared
+// local Postgres database. `cms.service.test.ts` mutates (writes/removes/
+// restores) the row at `about.card.who-are-we` via its `PLAIN_TEXT_SLOT_KEY`
+// and `restoreSlotValue`/`withSlotRowRemoved`; if this suite's mutating tests
+// (`PUT /admin/cms/:slotKey`, `withSlotRowRemoved`) targeted that SAME row
+// concurrently, the two suites' delete/upsert/restore sequences could
+// interleave — e.g. one suite's `restoreRow` racing the other's
+// `withSlotRowRemoved` delete — producing exactly the kind of intermittent
+// "row not found" / "value mismatch" flake that is incredibly painful to
+// reproduce locally (it appeared in CI-style `vitest run` but not when this
+// file was run in isolation). The fix is the simplest one available: give
+// each suite its OWN slice of the six-slot registry to mutate.
+//
+//   - `cms.service.test.ts` owns `about.card.who-are-we` (mutating) and reads
+//     `about.card.what-we-do` (read-only — map-membership assertions only,
+//     never written/removed there).
+//   - THIS suite owns `contact.capeTown.card` / `contact.durban.card`
+//     (mutating — PUT + `withSlotRowRemoved` + `restoreRow`) and reads
+//     `about.card.what-we-do` (read-only — same safe slot the other suite
+//     also only reads, so two read-only consumers cannot race each other).
+//
+// Both partitions are exercised against the real, full six-slot registry
+// (`CMS_SLOTS`), so no coverage is lost — each suite simply mutates a
+// different (real, registered) member of it.
+// -----------------------------------------------------------------------------
+const PLAIN_TEXT_SLOT_KEY = 'contact.capeTown.card';
 const SECOND_SLOT_KEY = 'about.card.what-we-do';
-const THIRD_SLOT_KEY = 'contact.page.details';
+const THIRD_SLOT_KEY = 'contact.durban.card';
 
 function uniqueSuffix(): string {
   return randomUUID();
