@@ -311,7 +311,241 @@ Build in this order because each has increasing dependency depth (Blog needs onl
 4. Admin routes: `GET/POST/PATCH/DELETE /admin/blog/posts`, `POST /admin/blog/posts/:id/publish|unpublish` — gated `requireAuth() + requireRole('ADMIN','BLOGGER')`. **The list/get/update/delete handlers must additionally call `canEditPost`/scope the query** — `requireRole('ADMIN','BLOGGER')` only proves the caller is *some* blogger, not that they own *this* post; without the ownership check a Blogger could `PATCH`/`DELETE` another author's post by guessing its id. Make this explicit in the router/service contract so it isn't assumed-but-unwritten.
 5. Pagination convention established here (page/limit or cursor) — reuse for Events. Cap the maximum `limit` server-side (e.g., 100) regardless of what the client requests — an unbounded `?limit=100000` is a cheap denial-of-service vector on a single small VPS.
 
-### 4b. Events Module
+### 4b. Events Module ✅ COMPLETED (2026-06-08)
+
+> **Done on `feature/dynamic-rewrite`** — repository, service, router, and
+> schemas/constants all built, wired into `app.ts`, and verified clean against
+> `typecheck`/`lint`/`test`/`build` (246/246 tests passing, including 81 new
+> Events-module tests across `events.repository.test.ts` (5),
+> `events.service.test.ts` (40), and `events.router.test.ts` (36)).
+>
+> - ✅ **Status-transition graph** (step 4's "define the allowed graph
+>   explicitly" — the plan's named open question): encoded as a single
+>   explicit lookup table, `ALLOWED_TRANSITIONS` in `events.service.ts`
+>   (search "STATUS TRANSITION GRAPH" for the full per-cell reasoning record —
+>   summary below is necessarily abbreviated):
+>
+>   | From \ To | DRAFT | PUBLISHED | CANCELLED |
+>   |-----------|-------|-----------|-----------|
+>   | DRAFT     |  —    |   YES     |   YES     |
+>   | PUBLISHED | YES   |   —       |   YES     |
+>   | CANCELLED | YES   |   YES     |   —       |
+>
+>   - `PUBLISHED -> DRAFT` ("unpublish") is allowed REGARDLESS of existing
+>     registrations — mirrors Blog's `unpublish` exactly; registrations stay
+>     attached (the FK is `Restrict`, not `Cascade`) and become visible again
+>     on re-publish.
+>   - `CANCELLED -> {DRAFT, PUBLISHED}` ("reopen") IS allowed — the plan asked
+>     this explicitly; hard-forbidding it would make a fat-fingered cancel
+>     permanently unrecoverable (deletion is impossible once an event has
+>     registrations — `onDelete: Restrict`).
+>   - `DRAFT -> CANCELLED` is allowed directly (no forced publish-then-cancel
+>     detour for an idea that should never have gone public).
+>   - Same-state "transitions" (`DRAFT -> DRAFT`, etc.) are REJECTED with
+>     `conflict()`, not silently accepted as a no-op — unlike Blog's
+>     `publish` (which has a meaningful `publishedAt`-restamping side effect
+>     to re-trigger), `Event` has no per-transition side effect a same-state
+>     transition could meaningfully repeat.
+>   - The table is exhaustively asserted against in
+>     `events.service.test.ts`'s "exhaustively covers every (from, to) cell"
+>     test — all 9 combinations, not a sample — guarding against the table
+>     silently drifting from this documented graph.
+>
+> - ✅ **Registration-count-awareness hook** (step 4's "the admin UI should
+>   warn 'this event has N registrations' before a destructive change"): NOT
+>   a notification mechanism (none exists, none was built — the plan
+>   explicitly warned against over-building one). Instead, `transitionStatus`
+>   and `updateEvent` (for `startsAt`/`endsAt` changes) ALWAYS return
+>   `{ event, registrationCount }` (`EventWithRegistrationCount`) — zero extra
+>   endpoints, zero round trips, the SPA renders "this will affect N
+>   registration(s)" directly from the response it already needed. Today
+>   (pre-4c) the count is structurally always `0`; the hook is wired correctly
+>   now so 4c's first registration makes it immediately meaningful.
+>   `deleteEvent` applies the SAME principle to the `Restrict`-FK rejection —
+>   a raw `P2003` becomes "cannot delete — N people are registered; export or
+>   handle their data first."
+>
+> - ✅ **Slug policy — CONFIRMED identical to Blog** (generate-once-at-
+>   CREATION; `Event.slug` is `String @unique`, byte-for-byte the same schema
+>   shape as `BlogPost.slug` — see `events.service.ts`'s "SLUG POLICY" note
+>   for the full "confirmation, not fresh derivation" record). Reuses Blog's
+>   `slugify`/`slugCandidate` helpers from `modules/blog/slug.ts` verbatim;
+>   `-2`/`-3`/... collision policy up to `MAX_SLUG_COLLISION_ATTEMPTS = 50`;
+>   `setSlug` is the dedicated, Admin-only (NOT `requireEventStaff`) manual
+>   override — gated identically to `BlogService.setSlug` and for the same
+>   "an author rewriting their own public URL unsupervised is the exact
+>   link-breakage hazard the policy exists to prevent" reason.
+>
+> - ✅ **Upcoming/past semantics — `endsAt`-based, NOT `startsAt`-based**
+>   (step 3's named open question): `temporalWhere` in `events.repository.ts`
+>   slices `'upcoming'` as `endsAt >= now()` and `'past'` as `endsAt < now()`.
+>   Reasoning: an event that has STARTED but not yet ENDED is still
+>   meaningfully "upcoming" from a registration/attendance standpoint (you can
+>   still show up) — an `startsAt`-based cutoff would wrongly classify an
+>   in-progress event as "past" the instant it begins. `events.service.test.ts`
+>   asserts this directly ("classifies a not-yet-concluded event ... as
+>   'upcoming', even if it has already started"). Both `'upcoming'` and
+>   `'past'` are exposed as filters (plus an unfiltered `'all'`) — honoring
+>   the plan's "past published events should remain browsable" blog-recap
+>   discovery note; ordering is soonest-first for upcoming, most-recent-first
+>   for past (the natural reading direction for each).
+>
+> - ✅ **No `publishedAt`-equivalent scheduling gap — CONFIRMED**: `Event` has
+>   no `publishedAt`-shaped column (contrast `BlogPost`). `status = PUBLISHED`
+>   is therefore the COMPLETE public-visibility predicate — verified in both
+>   `events.service.test.ts` and `events.router.test.ts` ("no scheduling-gap
+>   limbo (unlike Blog)": a `PUBLISHED` event with a `startsAt` 30 days out is
+>   immediately publicly visible, unlike a `BlogPost` with a future
+>   `publishedAt`).
+>
+> - ✅ **EVENT-MANAGER OWNERSHIP — DECIDED: any Event Manager may manage any
+>   event** (no `canEditPost`-equivalent per-resource ownership boundary
+>   exists or was built — see `events.service.ts`'s "EVENT-MANAGER OWNERSHIP"
+>   note for the full reasoning: architecture.md §9.2's RBAC matrix names a
+>   flat `requireRole('ADMIN','EVENT_MANAGER')` with no "and only their own"
+>   qualifier, unlike Blog's explicitly-named-and-flagged Blogger-ownership
+>   rule; a small org realistically has one or two Event Managers sharing one
+>   calendar, and per-manager silos would actively hurt that workflow).
+>   `Event.createdById` is attribution/audit metadata only.
+>   `requireEventStaff` (`requireRole('ADMIN','EVENT_MANAGER')`) is therefore
+>   BOTH NECESSARY AND SUFFICIENT for every `/admin/events/:id*` route — there
+>   is no second, service-layer ownership gate to layer on top (contrast
+>   Blog's extensive "necessary but not sufficient" router note). Verified
+>   directly: `events.service.test.ts`'s "lets a DIFFERENT Event Manager
+>   update/transition/view" and `events.router.test.ts`'s matching
+>   "no per-resource ownership boundary — by design" router-level test.
+>   **Flagged exactly like Blog's Blogger-default**: a one-line service change
+>   (add a `canManageEvent` predicate mirroring `canEditPost`'s shape) if a
+>   stakeholder later asks for per-manager scoping.
+>
+> - ✅ **THE CAPACITY INVARIANT — race-safe, transactional, GENUINELY
+>   concurrency-tested** (step 2 / architecture.md §7.3 invariant #6 — the
+>   single most consequential piece of groundwork in this module, because
+>   Phase 4c's `RegistrationService.registerAttendee` depends on it directly):
+>
+>   **Algorithm chosen — explicit row-level locking, NOT
+>   `INSERT ... SELECT ... WHERE count < capacity`:**
+>   ```
+>   BEGIN;
+>     SELECT "capacity" FROM "events" WHERE "id" = $1 FOR UPDATE;  -- (1) LOCK
+>     SELECT count(*) FROM "registrations" WHERE "eventId" = $1;   -- (2) COUNT
+>     INSERT INTO "registrations" (...) VALUES (...);              -- (3) INSERT
+>   COMMIT;
+>   ```
+>   executed via `db.$transaction(async (tx) => {...})` (Prisma's interactive
+>   form) at default `READ COMMITTED` isolation. `SELECT ... FOR UPDATE`
+>   takes an exclusive ROW-LEVEL LOCK on the `events` row — THAT lock is the
+>   actual source of atomicity: any concurrent attempt for the SAME `eventId`
+>   blocks at ITS OWN step (1) until this transaction commits/rolls back, so
+>   steps (2)/(3) are provably never interleaved across attempts. Simpler to
+>   reason about than `SERIALIZABLE` + retry-on-`40001` — no retry loop, no
+>   serialization-failure handling, because nothing is left to serialize
+>   against once the row lock is held.
+>
+>   **A genuinely-broken first attempt — preserved in full in
+>   `events.repository.ts`'s doc-comment as the cautionary record this task's
+>   own brief asked for**: the FIRST implementation used the plan's
+>   second-named option, a single `INSERT ... SELECT ... WHERE capacity IS
+>   NULL OR (SELECT count(*) ...) < capacity` statement, on the (incorrect)
+>   theory that it is "atomic against a single MVCC snapshot." It is NOT, at
+>   `READ COMMITTED`: ten concurrent sessions each see the same pre-insert
+>   count (none of their own uncommitted inserts are visible to one another)
+>   and each independently concludes "there's room" — overselling by exactly
+>   the margin the primitive exists to prevent. **This was caught — not
+>   theorized about, ACTUALLY CAUGHT — by the genuine `Promise.all`
+>   concurrency test**: the capacity-2 variant left 9 persisted rows where at
+>   most 2 may ever exist. A SEQUENTIAL test of the same broken
+>   implementation would have passed cleanly (proving nothing about the
+>   concurrent behaviour that actually matters) — the textbook "test most
+>   likely to be written wrong in a way that still goes green" this task's
+>   brief (and plan.md Phase 11 item 2) names. The corrected row-lock version
+>   is what ships.
+>
+>   **The `maxWait`/`timeout` tuning decision** (a real production concern
+>   this episode surfaced, not merely a test-environment workaround): firing
+>   N=10 concurrent attempts at the SAME event row means all 10 genuinely
+>   serialize on the `FOR UPDATE` lock — an instrumented measurement of this
+>   exact scenario found each fully-serialized lock-acquire→commit cycle takes
+>   ~210ms, with the LAST of 10 finishing at ~2.14 SECONDS — comfortably
+>   exceeding Prisma's DEFAULT `maxWait: 2000ms`, surfacing as
+>   `P2028 "Unable to start a transaction in the given time"` even though
+>   every attempt is making real, correct progress (just queued on a lock that
+>   WILL release soon). This is NOT pool exhaustion (this machine's default
+>   `connection_limit = 2*cpus+1 = 17` comfortably covers 10 concurrent
+>   transactions) and NOT a broken lock (the lock is doing exactly what it
+>   should). `tryRegisterAtomically` now passes EXPLICIT, measurement-backed
+>   options — `REGISTRATION_TRANSACTION_OPTIONS = { maxWait: 15_000, timeout:
+>   20_000 }` (named constant, documented in full in `events.repository.ts`,
+>   right above the primitive) — sized at roughly 10x the measured worst case
+>   for THIS module's realistic load profile (a "small, low-traffic,
+>   single-VPS" org per architecture.md §3/§11; ~70-deep same-event
+>   contention would be the ceiling these values absorb, an order of
+>   magnitude beyond any plausible burst). Fixed at the PRIMITIVE — not just
+>   the test — because a real registration-opening burst against a popular
+>   event would hit the identical ceiling in production.
+>
+>   **Verification — genuinely, not by weakening the test**: both concurrency
+>   tests in `events.repository.test.ts` still fire the full N=10 concurrent
+>   `Promise.all` attempts (capacity-1: exactly 1 success / 9 rejections;
+>   capacity-2: exactly 2 successes / 8 rejections — both verified against
+>   ground-truth `db.registration.count`, not merely the primitive's
+>   self-reported results) and now pass consistently across repeated runs.
+>
+> - ✅ **Where the reusable `tryRegisterAtomically` primitive lives — for
+>   Phase 4c**: `EventRepository.tryRegisterAtomically` in
+>   `api/src/modules/events/events.repository.ts`, wrapped by
+>   `EventService.tryRegisterWithCapacityCheck` in `events.service.ts` (the
+>   two-layer "fast advisory pre-check, then the atomic guarantee" shape —
+>   search "CAPACITY-CHECK ALGORITHM"/"two-layer" in that file). Phase 4c's
+>   `RegistrationService.registerAttendee` should call
+>   `eventService.tryRegisterWithCapacityCheck(eventId, registration)`
+>   directly — it returns `{ registrationId }` on success or throws
+>   `capacityExceeded()` (409) on failure; it does NOT check
+>   `status === PUBLISHED && !started` or the soft duplicate-`(eventId,
+>   email)` guard (4c's job, layered on top, BEFORE calling this — see that
+>   method's "what this does NOT do" doc-comment list for the full boundary
+>   record).
+>
+> - ✅ **Dormant `isPaid`/`priceCents` (ADR-0006)**: the schema REJECTS (400
+>   `VALIDATION_ERROR`, not silent coercion) any non-default value — `isPaid:
+>   true` or a non-null `priceCents` get a loud, field-named 400 explaining
+>   v1 has zero payment logic. `EventService.createEvent`'s/`updateEvent`'s
+>   input types don't even carry the fields (a second, structural guarantee on
+>   top of the schema rejection — no code path through which a non-default
+>   value could reach the repository). Verified at BOTH layers:
+>   `events.service.test.ts` ("structurally always persisted at v1-safe
+>   defaults") and `events.router.test.ts` ("the actual VALIDATION BOUNDARY" —
+>   `isPaid: true`/`priceCents: 5000` each get a 400 naming the field;
+>   `isPaid: false`/`priceCents: null` are explicitly accepted as the only
+>   legal non-omitted shapes).
+>
+> **Deviations from the plan / decisions made along the way** (flagged for
+> review, none blocking):
+> - The plan's step 2 offered two algorithm options and asked to "decide and
+>   document which is used" — the SECOND-named option (`INSERT ... SELECT ...
+>   WHERE count < capacity`) was tried FIRST and found genuinely broken under
+>   `READ COMMITTED` (see the capacity-invariant note above); the row-lock
+>   approach (closer to, but more precise than, the first-named "Serializable
+>   + retry" option — it needs no retry loop at all) is what ships. This
+>   "wrong-then-corrected" arc is preserved in full in
+>   `events.repository.ts`'s doc-comment specifically so a future reader does
+>   not "simplify" the primitive back toward the plausible-but-broken shape.
+> - `maxWait`/`timeout` were NOT part of the plan's explicit scope — they
+>   surfaced as a genuine production-relevant consequence of the chosen
+>   (correct) row-lock algorithm under deep same-event contention, and were
+>   fixed at the primitive layer (not patched around in the test) per the
+>   "the test caught a real thing; fix the real thing" discipline.
+>
+> **Critical files**:
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\events\events.repository.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\events\events.service.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\events\events.router.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\events\events.schemas.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\events\events.constants.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\events\events.repository.test.ts` (the GENUINE `Promise.all` concurrency proof — Phase 4c should read this file's header before writing its own registration tests)
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\events\events.service.test.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\events\events.router.test.ts`
+
 1. Repository + service: CRUD, branch scoping, `status` transitions (`DRAFT|PUBLISHED|CANCELLED`).
 2. **Capacity invariant** (architecture.md §7.3.6): enforce transactionally — this is foundational groundwork for the Registration module's `registerAttendee` (build the capacity-check primitive here, e.g., a serializable transaction or a DB-level check constraint + retry, so Registrations can call into it).
    - **Concretely**: the race-safe pattern in Postgres/Prisma is to perform the count-and-insert inside a single `prisma.$transaction` using `Serializable` isolation (and retry on serialization-failure error code `40001`), OR use a single SQL statement that does `INSERT ... SELECT ... WHERE (SELECT count(*) ...) < capacity` so the check-and-insert is atomic at the database level — the latter is more robust under load than an application-level "count, then insert" which has a TOCTOU race even inside a transaction at default (`ReadCommitted`) isolation. Decide and document which pattern is used; write the concurrency test (Phase 11 item 2) against the *real* implementation, not a simplified version.
