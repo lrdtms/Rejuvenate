@@ -170,7 +170,138 @@ Steps:
 
 Build in this order because each has increasing dependency depth (Blog needs only User; Events needs User; Registrations need Event; CMS needs User for `lastEditedBy`; Media needs Blog/Event as owners).
 
-### 4a. Blog Module
+### 4a. Blog Module ✅ COMPLETED (2026-06-08)
+
+> **Done on `feature/dynamic-rewrite`** — repository, service, router, and shared
+> cross-module helpers (pagination, sanitizer) all built, wired into `app.ts`,
+> and verified clean against `typecheck`/`lint`/`test`/`build` (165/165 tests
+> passing, including 57 new Blog-module tests across `slug.test.ts` (10),
+> `blog.service.test.ts` (24), and `blog.router.test.ts` (23)).
+>
+> - ✅ **Shared helpers carved out for Events (4b) to reuse verbatim** —
+>   the plan's own "pagination convention established here — reuse for
+>   Events" instruction (step 5) is honored literally:
+>   - `api/src/lib/pagination.ts` — `paginationQuerySchema` (`{ page, limit }`,
+>     `z.coerce`-based, `MAX_PAGE_LIMIT = 100` enforced as a REJECTED-not-
+>     clamped Zod `.max()` bound — a `?limit=100000` gets a 400
+>     `VALIDATION_ERROR` naming the bound, not a silent clamp), `toSkipTake`,
+>     `toPaginatedResult` (the `{ items, page, limit, total, pageCount }`
+>     envelope every paginated list endpoint returns), and the constants
+>     `DEFAULT_PAGE_LIMIT`/`MAX_PAGE_LIMIT`. Events should `import` and
+>     `.extend(...)` `paginationQuerySchema` for its `branch`/`upcoming`
+>     filters rather than reinventing page/limit parsing — see that file's
+>     extensive header for the page/limit-vs-cursor rationale.
+>   - `api/src/lib/sanitizeHtml.ts` — THE single source of truth for "what
+>     HTML is allowed anywhere on this site" (per the plan's own "share the
+>     sanitizer config/allow-list between modules" instruction in step 2).
+>     Exports `sanitizeBlogPostBody` (bound to `RICH_TEXT_ALLOW_LIST` — the
+>     heavier Blog-post-body allow-list: `h2`-`h4`/`p`/`br`/`strong`/`em`/
+>     lists/`blockquote`/`a`/`img`, forced `rel="noopener noreferrer"` +
+>     `target="_blank"` on links, `http(s)`/`mailto`-only URL schemes) and
+>     `sanitizeCmsRichText` (bound to the deliberately tiny
+>     `CMS_RICH_TEXT_ALLOW_LIST` — `p`/`br`/`strong`/`em` only, per
+>     architecture.md §9.5's "bold, italic, line breaks only" CMS ceiling).
+>     Both share one `BASE_OPTIONS` baseline (no `style`/`class`/`on*`
+>     attributes ever, `disallowedTagsMode: 'discard'`,
+>     `allowProtocolRelative: false`) via one `buildSanitizer(allowList)`
+>     factory — Phase 4d (CMS) MUST import `sanitizeCmsRichText`/
+>     `CMS_RICH_TEXT_ALLOW_LIST` from here, never define a parallel config.
+>
+> - ✅ **Slug-policy reconciliation — generate-once-at-CREATION (not "first
+>   publish")**: documented in full in `blog.service.ts`'s file-header
+>   doc-comment (search "SLUG POLICY" there for the complete reasoning — the
+>   summary below is necessarily abbreviated). The plan's literal step-2
+>   wording ("generate once on first publish, keep stable thereafter") is
+>   STRUCTURALLY INCOMPATIBLE with the schema this team committed to in
+>   Phase 1: `BlogPost.slug` is `String @unique` — non-nullable — so
+>   `db.blogPost.create(...)` cannot persist a "no slug yet" `DRAFT` row at
+>   all; "first publish" would require either a schema change nobody asked
+>   for or a "generate twice, discard the first" anti-pattern that
+>   contradicts the policy's own name. Generating at CREATION instead is not
+>   a deviation but the correct DERIVED reading: it satisfies the plan's
+>   actual underlying goal (link stability for shared/public URLs) at least
+>   as well — creation always precedes first-publish, so any link stable
+>   under a first-publish freeze is trivially stable under a creation-time
+>   freeze too — and arguably more completely, since it also stabilizes
+>   internally-shared draft-review links (which this app has no other
+>   mechanism for) from the moment the post exists in any form. Every other
+>   promise in the plan's policy is preserved exactly as specified: `update`/
+>   `publish`/`unpublish` never touch `slug` (verified by
+>   `blog.service.test.ts`'s "keeps the slug stable across publish/unpublish/
+>   title-update" test), and `setSlug` is the dedicated, narrowly-scoped,
+>   ADMIN-ONLY manual-edit escape hatch the plan asked for — gated at the
+>   router by `requireRole(authService, 'ADMIN')` ALONE (deliberately NOT
+>   `canEditPost`, which would be too PERMISSIVE here: an author rewriting
+>   their own post's public URL unsupervised is exactly the link-breakage
+>   hazard the policy exists to prevent — see `BlogService.setSlug`'s
+>   doc-comment for the full "why `canEditPost` is the wrong check for this
+>   one method" argument). Collision resolution follows the documented
+>   `-2`/`-3`/... policy (`slug.ts`'s `slugCandidate`, probed sequentially by
+>   `BlogService.generateUniqueSlug` up to `MAX_SLUG_COLLISION_ATTEMPTS = 50`
+>   before failing loudly with `conflict()`).
+>
+> - ✅ **Sanitization-on-save**: both `createPost` and `updatePost` (only
+>   when a new `body` is actually supplied — `undefined` is never coerced
+>   into a sanitized empty string, preserving the repository's "leave this
+>   field alone" partial-update contract) route every body through
+>   `sanitizeBlogPostBody` BEFORE the repository ever sees it — "sanitize
+>   before persisting, never persist-then-sanitize." Verified end-to-end
+>   (script tags, `onclick`/`onerror` handlers, and `javascript:` URLs all
+>   stripped while allowed structure survives) at both the service layer
+>   (`blog.service.test.ts`) and through real HTTP requests at the router
+>   layer (`blog.router.test.ts`'s `POST /admin/blog/posts` "sanitized body"
+>   assertion).
+>
+> - ✅ **Ownership enforcement** (`canEditPost` from Phase 3, applied via the
+>   shared `requireOwnedOrNotFound` helper inside `BlogService` — existence
+>   check before ownership check, so a non-owner gets the SAME 404 a
+>   nonexistent-id caller would for "not found," and a real 403 only for
+>   "exists, but not yours"): every single-post mutation route
+>   (`PATCH`/`DELETE`/`publish`/`unpublish`) is covered by a dedicated
+>   "Blogger cannot mutate another author's post by id" router-level test
+>   that asserts BOTH the 403 response AND that the underlying row is
+>   provably untouched — exactly the brief's required test, run through real
+>   HTTP + real sessions, not a service-layer shortcut.
+>
+> - ✅ **Public-visibility invariant** (`status = PUBLISHED AND publishedAt
+>   <= now()`, architecture.md §7.3 invariant #3): encoded ONCE, in the
+>   repository's `publicVisibilityWhere()` predicate, shared verbatim by both
+>   `listPublished` and `findPublishedBySlug` — making "list and detail
+>   disagree about what's public" structurally impossible rather than merely
+>   remembered. The brief's required "scheduled-but-not-yet-live post 404s on
+>   direct slug access" test exists at BOTH layers (`blog.service.test.ts`
+>   and `blog.router.test.ts`), asserting the 404 is BYTE-IDENTICAL to a
+>   genuinely-nonexistent slug's 404 (collapsed-outcome anti-enumeration
+>   guarantee — a distinguishing response would itself leak "this slug
+>   exists, just not for you yet").
+>
+> - ✅ **Pagination convention**: `{ items, page, limit, total, pageCount }`
+>   envelope, `page`/`limit` query params (1-indexed, `DEFAULT_PAGE_LIMIT =
+>   20`, `MAX_PAGE_LIMIT = 100` REJECTED not clamped) — see the shared-helpers
+>   note above; this is the literal shape Events (4b) should produce too.
+>
+> **Deviations from the plan / decisions made along the way** (flagged for
+> review, none blocking):
+> - The slug-generation MOMENT differs from the plan's literal "on first
+>   publish" phrasing — see the dedicated reconciliation note above and the
+>   extensive doc-comment in `blog.service.ts`. The link-stability GUARANTEE
+>   the plan was protecting is fully delivered, via the only mechanism the
+>   already-committed schema can support.
+> - `setSlug` does not use `canEditPost` (deliberately) — flagged inline at
+>   length in both `BlogService.setSlug` and `blog.router.ts` so a future
+>   reader doesn't "simplify" it into the module's general ownership pattern
+>   and reopen the exact hazard the dedicated path exists to close.
+>
+> **Critical files**:
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\blog\blog.repository.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\blog\blog.service.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\blog\blog.router.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\blog\blog.schemas.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\blog\blog.constants.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\modules\blog\slug.ts`
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\lib\pagination.ts` (shared — Events reuses)
+> - `C:\Users\Admin\Projects\Rejuvenate\api\src\lib\sanitizeHtml.ts` (shared — CMS reuses)
+
 1. Repository (Prisma-backed `BlogPost` queries: list published, get-by-slug, list-by-author, CRUD).
 2. Service: `createPost`, `updatePost` (enforces `canEditPost`), `publish`/`unpublish` (status transitions; only Admin or author), slug generation + uniqueness.
    - **Sanitize the rich-text body server-side on every create/update** (architecture.md §12.1.9 — strict allow-list, e.g., `sanitize-html`) — this is a Blog-module responsibility, not a CMS-only concern; the plan's CMS section (4d) explicitly calls out sanitization but the Blog module needs the identical control for post bodies and it's easy to build CMS sanitization carefully and then forget the symmetric Blog requirement. Share the sanitizer config/allow-list between modules (one source of truth for "what HTML is allowed anywhere on this site").
