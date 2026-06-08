@@ -116,11 +116,106 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  blogPosts        BlogPost[]
-  events           Event[]
-  cmsContentEdited CMSContent[]
+  blogPosts           BlogPost[]
+  events              Event[]
+  cmsContentEdited    CMSContent[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// PASSWORD RESET TOKEN — DECISION RECORD (Phase 3 step 3, AuthService)
+// ---------------------------------------------------------------------------
+// architecture.md §9.3 specifies "password reset uses a time-boxed, single-use
+// token emailed to the account's registered address." No such model existed in
+// the original schema — this is a small, additive migration to add one.
+//
+// DECISION: a small first-class Prisma model (Option (a) from the brief),
+// NOT an in-memory map/cache.
+//
+// Rationale (mirrors the session-table decision-record's reasoning style):
+//   - This app runs unattended on a single VPS, supervised by PM2, and is
+//     redeployed via `git pull` -> ... -> `pm2 reload` (architecture.md §11).
+//     An in-memory token store would be wiped on every reload/crash/restart —
+//     a user who requested a reset minutes before a routine deploy would
+//     silently get a dead link with no error surfaced anywhere. A persisted,
+//     durable record survives process restarts exactly like sessions do (and
+//     for the same reason).
+//   - Postgres is already "the single system of record" (architecture.md §6) —
+//     reaching for a second storage mechanism (node-cache, an LRU map, Redis)
+//     to hold a handful of short-lived rows is exactly the kind of speculative
+//     extra infrastructure the YAGNI guidance in this project warns against.
+//     One database, one migration history, one backup story (the existing
+//     daily pg_dump covers this table automatically — unlike the `session`
+//     table, this one IS owned by Prisma).
+//   - A first-class model gives us referential integrity (FK to User — a
+//     reset token for a deleted/nonexistent user is a contradiction we want
+//     the DB to make impossible), an index for fast lookup-by-hash, and a
+//     natural home for the "single-use" (`usedAt`) and "time-boxed"
+//     (`expiresAt`) invariants that the architecture brief requires.
+//
+// SECURITY — why `tokenHash`, not `token`:
+//   The raw token is a high-entropy random string emailed to the user; only
+//   ITS HASH (SHA-256 — fast, deterministic, NOT argon2id: this is a
+//   lookup key over an already-high-entropy random value, not a low-entropy
+//   user-chosen secret, so a memory-hard KDF buys nothing here and would
+//   needlessly slow down every reset-confirm request) is persisted. This
+//   means a database leak (backup exposure, SQL-injection read, etc.) does
+//   NOT hand an attacker working reset links — they would still need the
+//   original emailed token, which never touches storage. Mirrors the
+//   "argon2id, never plaintext" posture on `User.passwordHash` one layer up
+//   the stack from where it usually applies.
+//
+// SINGLE-USE — why `usedAt: DateTime?` rather than deleting the row on use:
+//   Keeping a tombstone (rather than deleting) means a replay of an
+//   already-used token can be distinguished ("this link was already used" vs.
+//   "this link doesn't exist/never existed") for clearer user-facing
+//   messaging, and leaves an audit trail of completed resets. Expired-and-
+//   unused rows are pruned by the same retention/purge mechanism POPIA
+//   already requires elsewhere (Phase 9) — or, simplest of all, a trivial
+//   periodic `DELETE WHERE expiresAt < now()` ops task; not built in v1
+//   (the row volume here is tiny — one per reset request — and harmless to
+//   leave for a future cleanup pass).
+model PasswordResetToken {
+  id     String @id @default(uuid())
+  userId String
+
+  // SHA-256 hex digest (64 chars) of the high-entropy raw token that was
+  // emailed to the user. See file-header "SECURITY" note for why we never
+  // store the raw value. `@unique` doubles as the lookup index for the
+  // confirm-flow — O(1) by hash, never a table scan/comparison loop.
+  tokenHash String @unique
+
+  // Time-boxed per architecture.md §9.3 — a token issued but never used
+  // becomes permanently unusable after this instant. AuthService pins the
+  // TTL (a short window measured in minutes, not hours/days — much shorter
+  // than a session's lifetime, since this credential can fully take over an
+  // account).
+  expiresAt DateTime
+
+  // Single-use: stamped the moment the token is successfully redeemed, and
+  // checked (must be null) before a redemption is allowed. See file-header
+  // note for why this is a tombstone rather than a delete.
+  usedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  // onDelete: Cascade — unlike BlogPost/Event/CMSContent (which preserve
+  // authored content via Restrict/SetNull when their owning user is
+  // removed), a password-reset token has no independent meaning once its
+  // owning account is gone; it is purely an ephemeral credential-recovery
+  // artifact, not content worth preserving for an audit trail. (User rows
+  // are never hard-deleted in practice — see User.isActive — so this path
+  // is mostly theoretical, but Cascade is the semantically correct choice
+  // if it ever did happen.)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Supports "invalidate/look up all of this user's outstanding reset
+  // tokens" (AuthService does this when issuing a fresh token or completing
+  // a reset — superseding any earlier ones).
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 model BlogPost {
