@@ -980,7 +980,7 @@ Steps:
 
 ---
 
-## Phase 8 — Admin Feature Screens (in dependency order, mirroring Phase 4)
+## Phase 8 — Admin Feature Screens (in dependency order, mirroring Phase 4) ✅ COMPLETED (2026-06-09)
 
 Each screen is blocked on its corresponding backend module (Phase 4) AND the admin shell (Phase 7). All list/mutation screens use React Query (`useQuery` for lists/detail, `useMutation` + `invalidateQueries` for create/update/delete/publish actions — e.g., publishing a post should invalidate both the admin list and, if cached, the public blog-list query so the new state is reflected without a manual refresh).
 
@@ -1109,7 +1109,7 @@ Steps (each maps to a named fitness function from §15):
 | M7 — RSVP goes live | 6 (RSVP portion) | ✅ Done (2026-06-09) | Needs M6 |
 | M8 — Media + Users backend | 4e, 4f | ✅ Done (2026-06-09) | Can trail M4/M6 |
 | M9 — Admin shell | 7 | ✅ Done (2026-06-09) | Needs M2 |
-| M10 — Admin feature screens | 8 | ⬜ Not started | Needs M9 + corresponding M4/M6/M8 module |
+| M10 — Admin feature screens | 8 | ✅ Done (2026-06-09) | Needs M9 + corresponding M4/M6/M8 module |
 | M11 — POPIA finalization | 9 | ⬜ Not started — **gated on stakeholder retention-period answer** | Track as external dependency |
 | M12 — Deployment | 10 | ⬜ Not started | Can start infra prep anytime; first real deploy needs M5+M7 buildable |
 | M13 — Testing/launch readiness | 11 | ⬜ Not started | Interleave fitness-function tests with their corresponding module phase; final smoke-test pass gates launch |
