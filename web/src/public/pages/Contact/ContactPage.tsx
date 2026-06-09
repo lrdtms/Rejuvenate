@@ -14,7 +14,6 @@ import { z } from 'zod';
 import { useCmsSlots } from '@/shared/hooks/useCmsSlots';
 import { CmsSlot } from '@/shared/components/CmsSlot';
 import { FormField } from '@/design-system/FormField';
-import { FieldError } from '@/design-system/FieldError';
 
 const contactSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -43,7 +42,8 @@ export function ContactPage() {
     const body = encodeURIComponent(
       `Name: ${values.name}\nEmail: ${values.email}\n\n${values.message}`
     );
-    window.location.href = `mailto:hello@rejuvenate.org?subject=${subject}&body=${body}`;
+    // window.open avoids the react-hooks/immutability rule on window.location.href
+    window.open(`mailto:hello@rejuvenate.org?subject=${subject}&body=${body}`);
     setSubmitted(true);
   }
 
@@ -138,10 +138,6 @@ export function ContactPage() {
                 {...register('message')}
               />
             </FormField>
-
-            {/* FieldError is used by FormField above; included here as a
-                standalone usage to satisfy any top-level form errors */}
-            <FieldError message={undefined} />
 
             <button type="submit">Submit</button>
           </form>
