@@ -421,6 +421,17 @@
   display: block;
 }
 
+/* ── Danger button variant ────────────────────────────────────────────── */
+.btn-danger {
+  color: #ff6b6b !important;
+  border-color: rgba(255, 107, 107, 0.4) !important;
+}
+
+.btn-danger:hover,
+.btn-danger:focus-visible {
+  background: rgba(255, 107, 107, 0.1) !important;
+}
+
 /* ── Media / image list ───────────────────────────────────────────────── */
 .admin-media-list {
   display: flex;
