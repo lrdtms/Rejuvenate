@@ -41,11 +41,13 @@ export function PostEditor() {
   const isAdmin = useHasRole('ADMIN');
 
   const [slugEditing, setSlugEditing] = useState(false);
-  const [slugValue, setSlugValue] = useState('');
+  // slugDraft only exists during active editing; display uses post.slug when not editing
+  const [slugDraft, setSlugDraft] = useState('');
   const [slugError, setSlugError] = useState<string | null>(null);
   const [slugSaving, setSlugSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [mediaList, setMediaList] = useState<MediaAsset[]>([]);
+  // Extra media uploaded during this session (not yet in the query cache)
+  const [uploadedMedia, setUploadedMedia] = useState<MediaAsset[]>([]);
 
   const {
     register,
@@ -80,13 +82,8 @@ export function PostEditor() {
   useEffect(() => {
     if (post) {
       reset({ title: post.title, body: post.body });
-      setSlugValue(post.slug);
     }
   }, [post, reset]);
-
-  useEffect(() => {
-    if (mediaData) setMediaList(mediaData.items);
-  }, [mediaData]);
 
   function invalidateCaches() {
     queryClient.invalidateQueries({ queryKey: ['adminBlogPosts'] });
@@ -146,7 +143,7 @@ export function PostEditor() {
     try {
       await apiFetch<void>(`/api/v1/admin/blog/posts/${id}/slug`, {
         method: 'PATCH',
-        body: JSON.stringify({ slug: slugValue }),
+        body: JSON.stringify({ slug: slugDraft }),
       });
       invalidateCaches();
       setSlugEditing(false);
@@ -166,8 +163,11 @@ export function PostEditor() {
     }
   }
 
+  // Derive full media list: fetched items + newly uploaded this session
+  const mediaList = [...uploadedMedia, ...(mediaData?.items ?? [])];
+
   function handleMediaUploaded(asset: MediaAsset) {
-    setMediaList((prev) => [asset, ...prev]);
+    setUploadedMedia((prev) => [asset, ...prev]);
   }
 
   const isBusy =
@@ -237,8 +237,8 @@ export function PostEditor() {
                   <input
                     className="admin-slug-input"
                     type="text"
-                    value={slugValue}
-                    onChange={(e) => setSlugValue(e.target.value)}
+                    value={slugDraft}
+                    onChange={(e) => setSlugDraft(e.target.value)}
                     aria-label="Post slug"
                     style={{
                       background: 'var(--panel-strong)',
@@ -261,7 +261,6 @@ export function PostEditor() {
                     variant="secondary"
                     onClick={() => {
                       setSlugEditing(false);
-                      setSlugValue(post.slug);
                       setSlugError(null);
                     }}
                     disabled={slugSaving}
@@ -280,7 +279,10 @@ export function PostEditor() {
                   {isAdmin && (
                     <Button
                       variant="secondary"
-                      onClick={() => setSlugEditing(true)}
+                      onClick={() => {
+                        setSlugDraft(post.slug);
+                        setSlugEditing(true);
+                      }}
                     >
                       Edit slug
                     </Button>

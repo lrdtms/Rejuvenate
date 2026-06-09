@@ -71,7 +71,6 @@ function MiniRichEditor({
     if (editor.getHTML() !== value) {
       editor.commands.setContent(value, { emitUpdate: false });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, editor]);
 
   if (!editor) return null;

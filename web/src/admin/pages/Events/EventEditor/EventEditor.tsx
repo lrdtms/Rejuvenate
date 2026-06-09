@@ -65,12 +65,12 @@ export function EventEditor() {
   const isAdmin = useHasRole('ADMIN');
 
   const [slugEditing, setSlugEditing] = useState(false);
-  const [slugValue, setSlugValue] = useState('');
+  const [slugDraft, setSlugDraft] = useState('');
   const [slugError, setSlugError] = useState<string | null>(null);
   const [slugSaving, setSlugSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState(false);
-  const [mediaList, setMediaList] = useState<MediaAsset[]>([]);
+  const [uploadedMedia, setUploadedMedia] = useState<MediaAsset[]>([]);
 
   const {
     register,
@@ -126,13 +126,8 @@ export function EventEditor() {
         locationDetail: event.locationDetail ?? '',
         capacity: event.capacity != null ? String(event.capacity) : '',
       });
-      setSlugValue(event.slug);
     }
   }, [event, reset]);
-
-  useEffect(() => {
-    if (mediaData) setMediaList(mediaData.items);
-  }, [mediaData]);
 
   function invalidateCaches() {
     queryClient.invalidateQueries({ queryKey: ['adminEvents'] });
@@ -210,7 +205,7 @@ export function EventEditor() {
     try {
       await apiFetch<void>(`/api/v1/admin/events/${id}/slug`, {
         method: 'PATCH',
-        body: JSON.stringify({ slug: slugValue }),
+        body: JSON.stringify({ slug: slugDraft }),
       });
       invalidateCaches();
       setSlugEditing(false);
@@ -241,6 +236,9 @@ export function EventEditor() {
 
   const regCount = regData?.total ?? 0;
   const isBusy = isSubmitting || createMutation.isPending || updateMutation.isPending || transitionMutation.isPending;
+
+  // Derive full media list: newly uploaded this session + fetched items
+  const mediaList = [...uploadedMedia, ...(mediaData?.items ?? [])];
 
   if (!isNew && eventLoading) {
     return <div className="admin-state">Loading event…</div>;
@@ -319,8 +317,8 @@ export function EventEditor() {
                   <input
                     className="admin-slug-input"
                     type="text"
-                    value={slugValue}
-                    onChange={(e) => setSlugValue(e.target.value)}
+                    value={slugDraft}
+                    onChange={(e) => setSlugDraft(e.target.value)}
                     aria-label="Event slug"
                     style={{
                       background: 'var(--panel-strong)',
@@ -339,7 +337,6 @@ export function EventEditor() {
                     variant="secondary"
                     onClick={() => {
                       setSlugEditing(false);
-                      setSlugValue(event.slug);
                       setSlugError(null);
                     }}
                     disabled={slugSaving}
@@ -356,7 +353,13 @@ export function EventEditor() {
                     </span>
                   )}
                   {isAdmin && (
-                    <Button variant="secondary" onClick={() => setSlugEditing(true)}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setSlugDraft(event.slug);
+                        setSlugEditing(true);
+                      }}
+                    >
                       Edit slug
                     </Button>
                   )}
@@ -490,7 +493,7 @@ export function EventEditor() {
           <ImageUploadField
             ownerType="EVENT"
             ownerId={id}
-            onUploaded={(asset) => setMediaList((prev) => [asset, ...prev])}
+            onUploaded={(asset) => setUploadedMedia((prev) => [asset, ...prev])}
           />
           {mediaList.length > 0 && (
             <div className="admin-media-list" style={{ marginTop: '1rem' }}>

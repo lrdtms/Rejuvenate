@@ -57,7 +57,6 @@ export function RichTextEditor({ value, onChange, mediaOwner, onMediaUploaded }:
       // setContent without emitting update event
       editor.commands.setContent(value, { emitUpdate: false });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, editor]);
 
   const setLink = useCallback(() => {
