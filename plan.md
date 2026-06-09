@@ -3,7 +3,7 @@
 > Companion to `prd.md` and `architecture.md` · Status: In Progress · Last updated: 2026-06-09
 > Author: Planning Agent · Audience: implementation team (stack-specialist agent / contracted developer)
 >
-> **Progress snapshot (2026-06-09)**: Phases 0–4f complete on `feature/dynamic-rewrite` — **all backend modules done**. Backend: 397/397 tests passing, lint/typecheck/build clean. Frontend: not yet started (Phases 5–8). Infrastructure/POPIA/launch: Phases 9–11 pending.
+> **Progress snapshot (2026-06-09)**: Phases 0–6 complete on `feature/dynamic-rewrite` — all backend modules done and public site fully wired to live data. Backend: 397/397 tests passing. Frontend: Phases 5 (design-system) and 6 (public pages + RSVP) done; Phases 7–8 (admin area) pending. Infrastructure/POPIA/launch: Phases 9–11 pending.
 
 ## Guiding Principles for Sequencing
 
@@ -904,7 +904,9 @@ Steps:
 
 ---
 
-## Phase 6 — Public Pages Wired to Live Data
+## Phase 6 — Public Pages Wired to Live Data ✅ COMPLETED (2026-06-09)
+
+> **Done on `feature/dynamic-rewrite`**: shared types (`CmsSlotView`, `BlogPost`, `Event`), five React Query hooks (`useCmsSlots`, `useBlogPosts`, `useBlogPost`, `useEvents`, `useEvent`), `CmsSlot` dumb renderer (PLAIN_TEXT/RICH_TEXT, reused by admin SlotEditor in Phase 8 for WYSIWYG fidelity), RSVP Zod schema (`rsvp.schema.ts` — Zod v4 transform approach for age coercion, client-side gate for consent checkbox). All public pages wired: AboutPage (3 CMS slots), CapeTownPage + DurbanPage (CMS contact card + branch-filtered upcoming events strip), ContactPage (CMS Reach Out card + RHF/Zod mailto form), HomePage (2-item events + blog preview strips), BlogListPage (paginated, URL-param page), BlogPostPage (useBlogPost, 404 → NotFoundPage), EventsPage (branch/temporal filter bar + pagination, URL params), EventDetailPage (useEvent, 404 → NotFoundPage, RsvpForm gated on startsAt), RsvpForm (POPIA consent notice first, all PRD fields, hidden honeypot, field-level 400 errors via setError, top-level 409/429 messages, success state). CSS additions: loading-placeholder, rich-text, home-preview-strips, events/blog list, pagination, event-detail, rsvp-form, blog-post-body. `npm run build`, `npm run lint`, `npx tsc --noEmit` all pass clean.
 
 **Goal**: Make the public site fully dynamic — this is where frontend meets backend for the first time (excluding auth).
 
@@ -1102,9 +1104,9 @@ Steps (each maps to a named fitness function from §15):
 | M2 — Auth spine | 3 | ✅ Done (2026-06-08) | M3 (design-system port has no backend dependency) |
 | M3 — Branding port | 5 | ✅ Done (2026-06-09) | M2 |
 | M4 — Content backend | 4a, 4b, 4d | ✅ Done (2026-06-08) | — (sequential within: blog/events parallel, CMS can trail) |
-| M5 — Public site goes live | 6 | ⬜ Not started | Starts once M3+M4(partial: CMS, Blog, Events) land |
+| M5 — Public site goes live | 6 | ✅ Done (2026-06-09) | Starts once M3+M4(partial: CMS, Blog, Events) land |
 | M6 — Registration backend | 4c | ✅ Done (2026-06-08) | Needs 4b done |
-| M7 — RSVP goes live | 6 (RSVP portion) | ⬜ Not started | Needs M6 |
+| M7 — RSVP goes live | 6 (RSVP portion) | ✅ Done (2026-06-09) | Needs M6 |
 | M8 — Media + Users backend | 4e, 4f | ✅ Done (2026-06-09) | Can trail M4/M6 |
 | M9 — Admin shell | 7 | ⬜ Not started | Needs M2 |
 | M10 — Admin feature screens | 8 | ⬜ Not started | Needs M9 + corresponding M4/M6/M8 module |
