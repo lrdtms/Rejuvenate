@@ -1,19 +1,6 @@
 /**
- * Temporary scaffolding placeholder.
- *
- * This component will be replaced by the real application shell — routing
- * (public + admin route trees), providers (React Query, etc.), and layout —
- * in a later phase (see plan.md Phases 5-8 and architecture.md §10.1/§10.2).
- *
- * Intentionally minimal: Phase 0 is scaffolding only.
+ * App.tsx — replaced by the router/providers wiring in main.tsx (Phase 5).
+ * This file is kept as a no-op re-export so any tooling that expects App.tsx
+ * does not break. It is not imported anywhere in the production bundle.
  */
-function App() {
-  return (
-    <main>
-      <h1>Rejuvenate</h1>
-      <p>Frontend scaffold — pages, design system, and routing land in later phases.</p>
-    </main>
-  );
-}
-
-export default App;
+export {};
