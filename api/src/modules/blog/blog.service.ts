@@ -106,9 +106,20 @@ import { toPaginatedResult, type PaginatedResult, type PaginationQuery } from '.
 import { sanitizeBlogPostBody } from '../../lib/sanitizeHtml';
 import type { BlogPostWithPublicAuthor, BlogRepository } from './blog.repository';
 import { slugCandidate, slugify } from './slug';
+import type { MediaService } from '../media/media.service';
 
 export interface BlogServiceOptions {
   repository: BlogRepository;
+  /** Optional — injected by `app.ts` once the Media module exists (Phase 4e).
+   * When present, `deletePost` calls `mediaService.cascadeDeleteForOwner`
+   * to clean up any `MediaAsset` rows (and their on-disk files) associated
+   * with the deleted post, satisfying ADR-0005's application-layer cascade
+   * requirement (no DB-level FK cascade exists for the polymorphic
+   * `ownerType`/`ownerId` relation — see `prisma/schema.prisma` and the
+   * Media module's file-header). When absent (e.g. unit tests that don't
+   * inject the media service), the cascade is skipped — consistent with the
+   * "no MediaAsset rows exist" state those tests operate in. */
+  mediaService?: MediaService;
 }
 
 /**
@@ -224,7 +235,7 @@ function baseSlugFor(title: string): string {
   return slug.length > 0 ? slug : 'post';
 }
 
-export function createBlogService({ repository }: BlogServiceOptions): BlogService {
+export function createBlogService({ repository, mediaService }: BlogServiceOptions): BlogService {
   /**
    * Probes `slugCandidate(1, base)`, `slugCandidate(2, base)`, ... against
    * `repository.slugExists` until an unused candidate is found, per the
@@ -360,6 +371,19 @@ export function createBlogService({ repository }: BlogServiceOptions): BlogServi
 
     async deletePost(actor, id) {
       await requireOwnedOrNotFound(actor, id);
+
+      // ADR-0005 cascade: delete all MediaAsset rows (and their on-disk files)
+      // for this post BEFORE deleting the post row itself. This satisfies the
+      // "no DB-level FK cascade exists" contract for the polymorphic
+      // ownerType/ownerId relation — if this step is skipped, orphaned
+      // MediaAsset rows referencing a deleted BlogPost id will accumulate and
+      // fail the ADR-0005 fitness-function integration test. The mediaService
+      // field is optional (absent in tests that don't inject it) — when absent,
+      // the cascade is skipped (those tests run in a state with no MediaAssets).
+      if (mediaService) {
+        await mediaService.cascadeDeleteForOwner('BLOG_POST', id);
+      }
+
       await repository.delete(id);
     },
 

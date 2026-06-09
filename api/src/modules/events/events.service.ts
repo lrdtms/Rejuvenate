@@ -227,9 +227,18 @@ import { capacityExceeded, conflict, notFound } from '../../lib/errors';
 import { toPaginatedResult, type PaginatedResult, type PaginationQuery } from '../../lib/pagination';
 import { slugCandidate, slugify } from '../blog/slug';
 import type { AtomicRegistrationResult, EventRepository } from './events.repository';
+import type { MediaService } from '../media/media.service';
 
 export interface EventServiceOptions {
   repository: EventRepository;
+  /** Optional — injected by `app.ts` once the Media module exists (Phase 4e).
+   * When present, `deleteEvent` calls `mediaService.cascadeDeleteForOwner`
+   * to clean up any `MediaAsset` rows (and their on-disk files) associated
+   * with the deleted event, satisfying ADR-0005's application-layer cascade
+   * requirement (no DB-level FK cascade exists for the polymorphic
+   * `ownerType`/`ownerId` relation). When absent (e.g. tests that don't
+   * inject the media service), the cascade is skipped. */
+  mediaService?: MediaService;
 }
 
 /** Identical bound, identical reasoning, as `MAX_SLUG_COLLISION_ATTEMPTS` in
@@ -511,7 +520,7 @@ export interface EventService {
   countRegistrations(eventId: string): Promise<number>;
 }
 
-export function createEventService({ repository }: EventServiceOptions): EventService {
+export function createEventService({ repository, mediaService }: EventServiceOptions): EventService {
   /**
    * Probes `slugCandidate(1, base)`, `slugCandidate(2, base)`, ... against
    * `repository.slugExists` until an unused candidate is found — IDENTICAL
@@ -659,6 +668,17 @@ export function createEventService({ repository }: EventServiceOptions): EventSe
 
     async deleteEvent(_actor, id) {
       await loadOrNotFound(id);
+
+      // ADR-0005 cascade: delete all MediaAsset rows (and their on-disk files)
+      // for this event BEFORE deleting the event row itself. Must happen before
+      // the `repository.delete(id)` call — if the event row is gone first and
+      // the media cascade fails, we have orphaned MediaAsset rows with no
+      // recoverable path (the owning event no longer exists). Cascading first
+      // means any failure in media cleanup leaves a still-existent event row
+      // that can be retried. See also the blog.service.ts equivalent.
+      if (mediaService) {
+        await mediaService.cascadeDeleteForOwner('EVENT', id);
+      }
 
       try {
         await repository.delete(id);
