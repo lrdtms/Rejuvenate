@@ -1,0 +1,241 @@
+/*
+ * Header & nav styles — ported verbatim from legacy styles.css.
+ * Covers: .site-header, .brand, .brand-logo, .site-nav, .menu,
+ * .nav-link, .dropdown-toggle, .has-dropdown, .submenu, .menu-toggle.
+ */
+
+/* ── Site header ────────────────────────────────────────────────────── */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1.2rem clamp(1.2rem, 6vw, 7rem);
+  background: #000;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ── Brand ──────────────────────────────────────────────────────────── */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--text);
+  text-decoration: none;
+  font-family: 'Manrope', sans-serif;
+  font-size: clamp(1.8rem, 2.9vw, 2.6rem);
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+.brand-logo {
+  width: calc(clamp(2rem, 3.4vw, 2.8rem) + 30px);
+  height: calc(clamp(2rem, 3.4vw, 2.8rem) + 30px);
+  display: block;
+  flex-shrink: 0;
+}
+
+/* ── Nav ────────────────────────────────────────────────────────────── */
+.site-nav {
+  margin-left: auto;
+}
+
+.menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: clamp(0.7rem, 1.6vw, 2rem);
+}
+
+.nav-link,
+.dropdown-toggle {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  text-decoration: none;
+  font: inherit;
+  font-size: clamp(1.25rem, 1.9vw, 2rem);
+  padding: 0.2rem 0.35rem;
+  border-radius: 0;
+  transition:
+    background-color 0.24s ease,
+    color 0.24s ease;
+  cursor: pointer;
+}
+
+.nav-link:hover,
+.nav-link:focus-visible,
+.dropdown-toggle:hover,
+.dropdown-toggle:focus-visible {
+  background: transparent;
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+  outline: none;
+}
+
+.nav-link.active,
+.dropdown-toggle.active {
+  background: transparent;
+  color: #fff;
+}
+
+/* ── Dropdown ───────────────────────────────────────────────────────── */
+.has-dropdown {
+  position: relative;
+}
+
+.submenu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  min-width: 210px;
+  list-style: none;
+  margin: 0;
+  padding: 0.55rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: auto;
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s ease,
+    visibility 0s linear 0.22s;
+}
+
+.submenu a {
+  display: block;
+  color: var(--text);
+  text-decoration: none;
+  padding: 0.6rem 0.7rem;
+  border-radius: 6px;
+}
+
+.submenu a:hover,
+.submenu a:focus-visible,
+.submenu a.active-city {
+  background: rgba(255, 255, 255, 0.14);
+  outline: none;
+}
+
+.has-dropdown:hover .submenu,
+.has-dropdown:focus-within .submenu,
+.has-dropdown.open .submenu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition-delay: 0s;
+}
+
+/* ── Hamburger toggle ───────────────────────────────────────────────── */
+.menu-toggle {
+  display: none;
+  width: 46px;
+  height: 42px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.9);
+  border-radius: 12px;
+  padding: 0.5rem;
+  cursor: pointer;
+}
+
+.menu-toggle span {
+  display: block;
+  height: 2px;
+  width: 100%;
+  background: #d6f7ff;
+  margin: 0.28rem 0;
+  transition:
+    transform 0.26s ease,
+    opacity 0.26s ease;
+}
+
+/* ── Mobile breakpoint ──────────────────────────────────────────────── */
+@media (max-width: 820px) {
+  .site-header {
+    flex-wrap: wrap;
+    gap: 0.85rem;
+    padding-block: 0.8rem;
+  }
+
+  .brand {
+    font-size: clamp(1.5rem, 7vw, 2rem);
+  }
+
+  .brand-logo {
+    width: calc(clamp(1.65rem, 7vw, 2.2rem) + 30px);
+    height: calc(clamp(1.65rem, 7vw, 2.2rem) + 30px);
+  }
+
+  .menu-toggle {
+    display: inline-block;
+    margin-left: auto;
+  }
+
+  .site-nav {
+    width: 100%;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.32s ease;
+    margin-left: 0;
+  }
+
+  .site-nav.open {
+    max-height: calc(100vh - 74px);
+    overflow-y: auto;
+  }
+
+  .menu {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+    padding-top: 0.65rem;
+  }
+
+  .nav-link,
+  .dropdown-toggle {
+    width: 100%;
+    text-align: left;
+    font-size: 1.05rem;
+    padding: 0.7rem 0.8rem;
+    border-radius: 12px;
+  }
+
+  .submenu {
+    position: static;
+    transform: none;
+    margin-top: 0.35rem;
+    background: rgba(10, 23, 40, 0.85);
+    border-radius: 12px;
+    display: none;
+    max-height: none;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    overflow: visible;
+    transition: none;
+    min-width: auto;
+  }
+
+  .has-dropdown.open .submenu {
+    display: block;
+    transform: none;
+  }
+
+  /* Cape Town mobile banner top gap fix (commit 5e096f9) */
+  .page-hero-cape-town {
+    background-size: cover;
+    background-position: center 45%;
+    background-repeat: no-repeat;
+  }
+}
