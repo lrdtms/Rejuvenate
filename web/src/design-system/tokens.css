@@ -1,0 +1,16 @@
+/*
+ * Design-system tokens — CSS custom properties ported verbatim from the
+ * legacy styles.css :root block. Do not rename or reorder these; a rename
+ * is a deliberate, diffable change that must happen separately.
+ */
+:root {
+  --bg: #02060d;
+  --panel: rgba(6, 16, 28, 0.72);
+  --panel-strong: rgba(4, 12, 21, 0.88);
+  --text: #ecf5ff;
+  --muted: #adc5de;
+  --accent: #5be7ff;
+  --accent-soft: rgba(91, 231, 255, 0.22);
+  --line: rgba(182, 225, 255, 0.18);
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
