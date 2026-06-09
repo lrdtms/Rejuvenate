@@ -1,19 +1,26 @@
 /**
  * CapeTownPage — ported from cape-town.html.
  *
- * The static Quicket event-card block has been intentionally dropped per
- * architecture.md §14 + plan.md Phase 5 note. A placeholder link to /events
- * is shown in its place until Phase 6 step 3 wires up the live Events widget
- * (option b from the plan).
- *
- * The location-contact-card body will be replaced by:
- *   <CmsSlot slotKey="contact.capeTown.card" /> in Phase 6.
+ * Wired in Phase 6:
+ * - Location contact card body driven by CmsSlot ('contact.capeTown.card')
+ * - Upcoming events strip (up to 3) from the CAPE_TOWN branch via useEvents
  */
 import { Link } from 'react-router-dom';
 import { PageHero } from '@/design-system/PageHero';
 import { Card } from '@/design-system/Card';
+import { useCmsSlots } from '@/shared/hooks/useCmsSlots';
+import { useEvents } from '@/shared/hooks/useEvents';
+import { CmsSlot } from '@/shared/components/CmsSlot';
+import { formatEventDateRange } from '@/shared/utils/formatDate';
 
 export function CapeTownPage() {
+  const { slots, isLoading: cmsLoading } = useCmsSlots(['contact.capeTown.card']);
+  const {
+    data: eventsData,
+    isLoading: eventsLoading,
+    error: eventsError,
+  } = useEvents({ branch: 'CAPE_TOWN', temporal: 'upcoming', limit: 3 });
+
   return (
     <main className="inner-page">
       <PageHero
@@ -23,20 +30,65 @@ export function CapeTownPage() {
       />
 
       <section className="content-grid location-content-grid">
-        {/* Quicket event-card dropped — see Phase 5 plan note / architecture.md §14.
-            Phase 6 step 3 will add a live Events widget here filtered by Cape Town. */}
+        {/* Upcoming events strip — minimal list, links to /events/:slug */}
         <Card>
           <h2>Upcoming Events</h2>
-          <p>
-            See our <Link to="/events">Events page</Link> for upcoming gatherings.
-          </p>
+          {eventsLoading && (
+            <div className="loading-placeholder" aria-busy="true" />
+          )}
+          {eventsError && (
+            <p style={{ color: 'var(--muted)' }}>
+              Could not load events.{' '}
+              <Link to="/events">View all events</Link>
+            </p>
+          )}
+          {!eventsLoading && !eventsError && eventsData && (
+            eventsData.items.length > 0 ? (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {eventsData.items.map((event) => (
+                  <li key={event.id} style={{ marginBottom: '0.75rem' }}>
+                    <Link
+                      to={`/events/${event.slug}`}
+                      style={{ color: 'var(--accent)', fontWeight: 700 }}
+                    >
+                      {event.title}
+                    </Link>
+                    <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.9rem' }}>
+                      {formatEventDateRange(event.startsAt, event.endsAt)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p style={{ color: 'var(--muted)' }}>
+                No upcoming events.{' '}
+                <Link to="/events">View all events</Link>
+              </p>
+            )
+          )}
+          {!eventsLoading && !eventsError && !eventsData && (
+            <p style={{ color: 'var(--muted)' }}>
+              See our <Link to="/events">Events page</Link> for upcoming gatherings.
+            </p>
+          )}
         </Card>
 
-        {/* Phase 6: replace body with <CmsSlot slotKey="contact.capeTown.card" /> */}
+        {/* Location contact card — body driven by CMS */}
         <Card variant="location-contact">
           <h2>Local Contact</h2>
-          <p>cape-town@rejuvenate.org</p>
-          <p>Add team contacts and WhatsApp group details here.</p>
+          {cmsLoading ? (
+            <div className="loading-placeholder" aria-busy="true" />
+          ) : (
+            <CmsSlot
+              slotKey="contact.capeTown.card"
+              slots={slots}
+              fallback={
+                <>
+                  <p style={{ color: 'var(--muted)' }}>cape-town@rejuvenate.org</p>
+                </>
+              }
+            />
+          )}
         </Card>
       </section>
     </main>
