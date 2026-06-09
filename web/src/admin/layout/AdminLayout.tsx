@@ -16,7 +16,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/shared/api/client';
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser';
-import { useHasRole } from '@/admin/components/RoleGuard';
+import { useHasRole } from '@/admin/components/useHasRole';
 import { AccessDeniedProvider } from '@/admin/components/AccessDeniedContext';
 import { adminNavItems } from '@/admin/config/navConfig';
 import type { AdminRole } from '@/admin/config/navConfig';

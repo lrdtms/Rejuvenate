@@ -17,13 +17,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '@/shared/api/client';
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser';
-import { useHasRole } from '@/admin/components/RoleGuard';
+import { useHasRole } from '@/admin/components/useHasRole';
 import { useAccessDenied } from '@/admin/components/AccessDeniedContext';
 import { adminNavItems } from '@/admin/config/navConfig';
 import type { AdminRole } from '@/admin/config/navConfig';
 import type { BlogPostsPage } from '@/shared/types';
 import type { EventsPage } from '@/shared/types';
-import { formatDate } from '@/shared/utils/formatDate';
+import { formatDateTime } from '@/shared/utils/formatDate';
 import './Dashboard.css';
 
 export function Dashboard() {
@@ -59,7 +59,7 @@ export function Dashboard() {
 
   const nearestEventDate =
     eventsData?.items?.[0]?.startsAt
-      ? formatDate(eventsData.items[0].startsAt)
+      ? formatDateTime(eventsData.items[0].startsAt)
       : null;
 
   return (

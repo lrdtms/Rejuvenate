@@ -1,19 +1,18 @@
 /**
- * RoleGuard — two forms:
+ * RoleGuard — component form for role-based access control.
  *
- * 1. Component form — wraps a subtree:
- *    <RoleGuard allow={['ADMIN', 'BLOGGER']}>
- *      <SomePage />
- *    </RoleGuard>
- *    Renders children if the current user's role is in `allow`.
- *    Otherwise redirects to /admin (Dashboard) and sets an access-denied message.
+ * Usage:
+ *   <RoleGuard allow={['ADMIN', 'BLOGGER']}>
+ *     <SomePage />
+ *   </RoleGuard>
  *
- * 2. Hook form — for inline conditional rendering:
- *    const canEdit = useHasRole('ADMIN', 'BLOGGER');
- *    Returns true if the current user's role is any of the given roles.
+ * Renders children if the current user's role is in `allow`.
+ * Otherwise redirects to /admin (Dashboard) and sets an access-denied message.
  *
- * Both forms are UX-only — the server independently re-checks every request.
+ * UX-only — the server independently re-checks every request.
  * The role matrix lives in adminNavConfig, not scattered here.
+ *
+ * See also: useHasRole (useHasRole.ts) for inline conditional rendering.
  */
 import { Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -43,15 +42,4 @@ export function RoleGuard({ allow, children }: RoleGuardProps) {
   }
 
   return <>{children}</>;
-}
-
-/**
- * useHasRole — inline conditional rendering helper.
- * Returns true if the current user has any of the given roles.
- * Returns false when loading or unauthenticated.
- */
-export function useHasRole(...roles: AdminRole[]): boolean {
-  const { user } = useCurrentUser();
-  if (!user) return false;
-  return roles.includes(user.role as AdminRole);
 }

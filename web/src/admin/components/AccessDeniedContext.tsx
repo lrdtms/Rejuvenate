@@ -4,8 +4,12 @@
  * Dashboard (which renders the banner).
  *
  * Intentionally uses React state — never localStorage/sessionStorage.
- * The message clears on the next navigation or explicit dismiss.
+ * The message clears on explicit dismiss.
+ *
+ * Exports both a provider component and a hook — the hook is co-located
+ * here since it is inseparable from the context it reads.
  */
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
