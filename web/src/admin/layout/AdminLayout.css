@@ -1,0 +1,271 @@
+/*
+ * AdminLayout — staff-facing shell.
+ * Utilitarian, calm, focused. Reuses brand tokens.
+ * No hero banners, no visual clutter.
+ *
+ * Layout modes:
+ *   Desktop (>820px): fixed sidebar (240px) + scrollable main content area
+ *   Mobile  (≤820px): hidden sidebar, topbar + slide-down nav drawer
+ */
+
+/* ── Shell grid ─────────────────────────────────────────────────────── */
+.admin-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  grid-template-rows: 1fr;
+  min-height: 100vh;
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────────── */
+.admin-sidebar {
+  grid-column: 1;
+  grid-row: 1;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 240px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-strong);
+  border-right: 1px solid var(--line);
+  z-index: 100;
+  overflow-y: auto;
+}
+
+/* Brand lockup in sidebar */
+.admin-sidebar-brand {
+  padding: 1.25rem 1.1rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-brand-link {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.admin-brand-link:hover .admin-brand-name,
+.admin-brand-link:focus-visible .admin-brand-name {
+  color: var(--accent);
+}
+
+.admin-logo {
+  height: 30px;
+  width: auto;
+}
+
+.admin-brand-name {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  transition: color 0.15s;
+}
+
+/* ── Nav ────────────────────────────────────────────────────────────── */
+.admin-nav {
+  flex: 1;
+  padding: 0.75rem 0;
+}
+
+.admin-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-nav-link {
+  display: block;
+  padding: 0.55rem 1.1rem;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border-left: 3px solid transparent;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.admin-nav-link:hover,
+.admin-nav-link:focus-visible {
+  color: var(--text);
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.admin-nav-link.active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+
+/* ── Sidebar footer (user info + logout) ────────────────────────────── */
+.admin-sidebar-footer {
+  padding: 1rem 1.1rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.admin-user-email {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-role-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid rgba(91, 231, 255, 0.3);
+  border-radius: 6px;
+  padding: 0.15rem 0.45rem;
+  width: fit-content;
+}
+
+.admin-logout-btn {
+  width: 100%;
+  justify-content: center;
+  font-size: 0.88rem;
+  padding: 0.5rem 0.75rem;
+}
+
+/* ── Main content area ──────────────────────────────────────────────── */
+.admin-main {
+  grid-column: 2;
+  grid-row: 1;
+  margin-left: 240px;
+  min-height: 100vh;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+}
+
+/* ── Mobile topbar ──────────────────────────────────────────────────── */
+.admin-topbar {
+  display: none;
+}
+
+/* ── Mobile nav drawer ──────────────────────────────────────────────── */
+.admin-mobile-nav {
+  display: none;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 820px) {
+  .admin-shell {
+    grid-template-columns: 1fr;
+  }
+
+  /* Hide desktop sidebar on mobile */
+  .admin-sidebar {
+    display: none;
+  }
+
+  /* Show topbar */
+  .admin-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--panel-strong);
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    z-index: 200;
+  }
+
+  .admin-topbar-brand {
+    gap: 0.5rem;
+  }
+
+  /* Hamburger toggle */
+  .admin-mobile-toggle {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 6px;
+  }
+
+  .admin-mobile-toggle span {
+    display: block;
+    height: 2px;
+    background: var(--text);
+    border-radius: 2px;
+    transition: background 0.15s;
+  }
+
+  .admin-mobile-toggle:hover span,
+  .admin-mobile-toggle:focus-visible span {
+    background: var(--accent);
+  }
+
+  /* Mobile nav drawer */
+  .admin-mobile-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    position: fixed;
+    top: 57px; /* height of topbar */
+    left: 0;
+    right: 0;
+    background: var(--panel-strong);
+    border-bottom: 1px solid var(--line);
+    padding: 0.75rem 1rem 1rem;
+    z-index: 150;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  .admin-mobile-nav .admin-nav-list {
+    flex-direction: column;
+  }
+
+  .admin-mobile-nav .admin-nav-link {
+    border-left: none;
+    border-radius: 8px;
+    padding: 0.6rem 0.85rem;
+  }
+
+  .admin-mobile-nav .admin-nav-link.active {
+    border-left: none;
+    background: var(--accent-soft);
+  }
+
+  .admin-mobile-user {
+    padding: 0.25rem 0;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  /* Main content fills full width on mobile */
+  .admin-main {
+    grid-column: 1;
+    margin-left: 0;
+    padding-top: 1rem;
+  }
+}
