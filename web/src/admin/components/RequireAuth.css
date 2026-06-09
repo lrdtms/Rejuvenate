@@ -1,0 +1,34 @@
+/*
+ * RequireAuth loading state — centered on the full viewport.
+ * Neutral appearance: does not flash the login page or protected content.
+ */
+.require-auth-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 1rem;
+  color: var(--muted);
+  font-family: 'Manrope', sans-serif;
+}
+
+.require-auth-spinner {
+  display: block;
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: require-auth-spin 0.75s linear infinite;
+}
+
+.require-auth-loading-text {
+  font-size: 0.95rem;
+}
+
+@keyframes require-auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
