@@ -865,7 +865,9 @@ Build in this order because each has increasing dependency depth (Blog needs onl
 
 ---
 
-## Phase 5 — Frontend Scaffolding & Design-System Port (can start in parallel with Phase 2-4)
+## Phase 5 — Frontend Scaffolding & Design-System Port ✅ COMPLETED (2026-06-09)
+
+> **Done on `feature/dynamic-rewrite`**: vite.config.ts path alias (`@` → `src/`), tsconfig.app.json `paths`, Google Fonts in `web/index.html`, design-system tokens + global CSS ported verbatim from `styles.css`, `Header`+`useDropdownNav` (full script.js port: hover-intent, touch guard, Escape, click-outside, resize, aria-expanded/aria-haspopup), `Footer`, `PageHero` (all variants including `page-hero-location`), `Card` (default/location-contact/contact-form variants), `Button` (primary/secondary), `Brand`, `FormField`+`FieldError` (aria-invalid/aria-describedby ready), typed API client (`apiFetch<T>`, `ApiError`, `isApiError`), `Providers` (React Query, staleTime 5 min, retry 1), `Layout` (Outlet-based), `Router` (element-based `<Routes>`, full public table + admin placeholder), all public page stubs with correct PageHero variants and placeholder content, Quicket event-card dropped from location pages (replaced with `/events` link per plan option b). All Reference assets copied to `web/src/assets/`. `npm run build`, `npm run lint`, `npm run typecheck` all pass clean.
 
 **Goal**: Stand up the Vite SPA shell and port the existing branding into reusable React components — this work has **no backend dependency** and should run concurrently with backend module-building to shorten the critical path.
 
@@ -1098,7 +1100,7 @@ Steps (each maps to a named fitness function from §15):
 |---|---|---|---|
 | M1 — Foundations | 0, 1, 2 | ✅ Done (2026-06-07/08) | — |
 | M2 — Auth spine | 3 | ✅ Done (2026-06-08) | M3 (design-system port has no backend dependency) |
-| M3 — Branding port | 5 | ⬜ Not started | M2 |
+| M3 — Branding port | 5 | ✅ Done (2026-06-09) | M2 |
 | M4 — Content backend | 4a, 4b, 4d | ✅ Done (2026-06-08) | — (sequential within: blog/events parallel, CMS can trail) |
 | M5 — Public site goes live | 6 | ⬜ Not started | Starts once M3+M4(partial: CMS, Blog, Events) land |
 | M6 — Registration backend | 4c | ✅ Done (2026-06-08) | Needs 4b done |
