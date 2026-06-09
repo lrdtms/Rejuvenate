@@ -3,7 +3,7 @@
 > Companion to `prd.md` and `architecture.md` · Status: In Progress · Last updated: 2026-06-09
 > Author: Planning Agent · Audience: implementation team (stack-specialist agent / contracted developer)
 >
-> **Progress snapshot (2026-06-09)**: Phases 0–4d complete on `feature/dynamic-rewrite`. Backend: 322/322 tests passing, lint/typecheck/build clean. Remaining backend: 4e (Media), 4f (Users). Frontend: not yet started (Phases 5–8). Infrastructure/POPIA/launch: Phases 9–11 pending.
+> **Progress snapshot (2026-06-09)**: Phases 0–4f complete on `feature/dynamic-rewrite` — **all backend modules done**. Backend: 397/397 tests passing, lint/typecheck/build clean. Frontend: not yet started (Phases 5–8). Infrastructure/POPIA/launch: Phases 9–11 pending.
 
 ## Guiding Principles for Sequencing
 
@@ -1103,7 +1103,7 @@ Steps (each maps to a named fitness function from §15):
 | M5 — Public site goes live | 6 | ⬜ Not started | Starts once M3+M4(partial: CMS, Blog, Events) land |
 | M6 — Registration backend | 4c | ✅ Done (2026-06-08) | Needs 4b done |
 | M7 — RSVP goes live | 6 (RSVP portion) | ⬜ Not started | Needs M6 |
-| M8 — Media + Users backend | 4e, 4f | ⬜ Not started | Can trail M4/M6 |
+| M8 — Media + Users backend | 4e, 4f | ✅ Done (2026-06-09) | Can trail M4/M6 |
 | M9 — Admin shell | 7 | ⬜ Not started | Needs M2 |
 | M10 — Admin feature screens | 8 | ⬜ Not started | Needs M9 + corresponding M4/M6/M8 module |
 | M11 — POPIA finalization | 9 | ⬜ Not started — **gated on stakeholder retention-period answer** | Track as external dependency |
