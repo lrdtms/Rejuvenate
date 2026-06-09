@@ -44,6 +44,9 @@ import { createMediaService } from './modules/media/media.service';
 import { createRegistrationRepository } from './modules/registrations/registrations.repository';
 import { createRegistrationRouter } from './modules/registrations/registrations.router';
 import { createRegistrationService } from './modules/registrations/registrations.service';
+import { createUsersRepository } from './modules/users/users.repository';
+import { createUsersRouter } from './modules/users/users.router';
+import { createUsersService } from './modules/users/users.service';
 
 /**
  * Upper bound on how long `/healthz` will wait for `SELECT 1` before treating the
@@ -382,6 +385,29 @@ export function createApp(options: CreateAppOptions = {}) {
   // "why not gate by ownerType at the router level" note).
   // ---------------------------------------------------------------------------
   router.use(createMediaRouter({ authService, mediaService }));
+
+  // ---------------------------------------------------------------------------
+  // Users module (plan.md Phase 4f) — Admin-only staff account management.
+  // Depends only on `User` (the schema's core entity) and `MailService` (for
+  // welcome emails on account creation). Mounted last among the content
+  // modules: no other module router depends on the Users router's paths, and
+  // `/admin/users*` overlaps with nothing any earlier module registers.
+  //
+  // Same composition-root posture as every other module: construct the
+  // repository -> service chain (wiring in the shared Prisma client, the
+  // already-constructed `ConsoleMailService` (via `authService`'s same
+  // `mailService` instance, shared to keep one mail-service implementation),
+  // and `rootLogger`) and hand the assembled `UsersService` (alongside
+  // `authService`, for the `requireRole(authService, 'ADMIN')` gate —
+  // see `users.router.ts`'s "why ADMIN-only" note) to `createUsersRouter`.
+  // ---------------------------------------------------------------------------
+  const usersRepository = createUsersRepository({ db });
+  const usersService = createUsersService({
+    repository: usersRepository,
+    mailService: new ConsoleMailService(rootLogger),
+    logger: rootLogger,
+  });
+  router.use(createUsersRouter({ authService, usersService }));
 
   // Test-only seam (see `CreateAppOptions` doc comment above) — registered before
   // the catch-all 404 handler so probe routes are actually reachable. Runs AFTER
