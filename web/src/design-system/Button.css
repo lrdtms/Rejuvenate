@@ -1,0 +1,48 @@
+/*
+ * Button styles — derived from the .contact-form button / .event-link
+ * patterns in legacy styles.css. These are the two visual variants in use:
+ *  primary   — accent gradient (matches .contact-form button / .event-link)
+ *  secondary — bordered ghost button
+ */
+
+.btn {
+  display: inline-block;
+  border: 0;
+  border-radius: 12px;
+  padding: 0.75rem 0.95rem;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  text-decoration: none;
+  transition: filter 0.18s ease;
+}
+
+.btn-primary {
+  color: #00101a;
+  background: linear-gradient(110deg, #5be7ff, #9ef2ff);
+}
+
+.btn-primary:hover,
+.btn-primary:focus-visible {
+  filter: brightness(1.05);
+  outline: none;
+}
+
+.btn-secondary {
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.btn-secondary:hover,
+.btn-secondary:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}

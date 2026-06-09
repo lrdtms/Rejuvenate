@@ -1,0 +1,10 @@
+/*
+ * Card styles — ported verbatim from legacy styles.css.
+ * Base .card plus modifiers: .location-contact-card (visual only, no extra
+ * styles needed beyond .card), .contact-form (grid layout + form chrome).
+ * Grid column rules live in global.css alongside the grid containers.
+ */
+
+/* Base card — already defined in global.css (grid-column, bg, border, etc.)
+   No additional rules needed here; this file exists as the logical home for
+   any future card-specific overrides. */

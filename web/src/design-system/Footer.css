@@ -1,0 +1,30 @@
+/*
+ * Footer styles.
+ * The legacy static site has no explicit footer markup — the footer is added
+ * here as a minimal branded complement to the header, using the same token
+ * palette and Manrope typeface.
+ */
+.site-footer {
+  padding: 1.5rem clamp(1.2rem, 6vw, 7rem);
+  background: #000;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.site-footer a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.site-footer a:hover,
+.site-footer a:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
