@@ -1,7 +1,9 @@
 # Rejuvenate — Implementation Plan
 
-> Companion to `prd.md` and `architecture.md` · Status: Proposed · Last updated: 2026-06-07
+> Companion to `prd.md` and `architecture.md` · Status: In Progress · Last updated: 2026-06-09
 > Author: Planning Agent · Audience: implementation team (stack-specialist agent / contracted developer)
+>
+> **Progress snapshot (2026-06-09)**: Phases 0–4d complete on `feature/dynamic-rewrite`. Backend: 322/322 tests passing, lint/typecheck/build clean. Remaining backend: 4e (Media), 4f (Users). Frontend: not yet started (Phases 5–8). Infrastructure/POPIA/launch: Phases 9–11 pending.
 
 ## Guiding Principles for Sequencing
 
@@ -1082,21 +1084,21 @@ Steps (each maps to a named fitness function from §15):
 
 ## Milestone / Session Mapping (suggested grouping for discrete work sessions)
 
-| Milestone | Phases | Can run in parallel with |
-|---|---|---|
-| M1 — Foundations | 0, 1, 2 | — |
-| M2 — Auth spine | 3 | M3 (design-system port has no backend dependency) |
-| M3 — Branding port | 5 | M2 |
-| M4 — Content backend | 4a, 4b, 4d | — (sequential within: blog/events parallel, CMS can trail) |
-| M5 — Public site goes live | 6 | Starts once M3+M4(partial: CMS, Blog, Events) land |
-| M6 — Registration backend | 4c | Needs 4b done |
-| M7 — RSVP goes live | 6 (RSVP portion) | Needs M6 |
-| M8 — Media + Users backend | 4e, 4f | Can trail M4/M6 |
-| M9 — Admin shell | 7 | Needs M2 |
-| M10 — Admin feature screens | 8 | Needs M9 + corresponding M4/M6/M8 module |
-| M11 — POPIA finalization | 9 | **Gated on stakeholder retention-period answer** — track as external dependency |
-| M12 — Deployment | 10 | Can start infra prep anytime; first real deploy needs M5+M7 buildable |
-| M13 — Testing/launch readiness | 11 | Interleave fitness-function tests with their corresponding module phase; final smoke-test pass gates launch |
+| Milestone | Phases | Status | Can run in parallel with |
+|---|---|---|---|
+| M1 — Foundations | 0, 1, 2 | ✅ Done (2026-06-07/08) | — |
+| M2 — Auth spine | 3 | ✅ Done (2026-06-08) | M3 (design-system port has no backend dependency) |
+| M3 — Branding port | 5 | ⬜ Not started | M2 |
+| M4 — Content backend | 4a, 4b, 4d | ✅ Done (2026-06-08) | — (sequential within: blog/events parallel, CMS can trail) |
+| M5 — Public site goes live | 6 | ⬜ Not started | Starts once M3+M4(partial: CMS, Blog, Events) land |
+| M6 — Registration backend | 4c | ✅ Done (2026-06-08) | Needs 4b done |
+| M7 — RSVP goes live | 6 (RSVP portion) | ⬜ Not started | Needs M6 |
+| M8 — Media + Users backend | 4e, 4f | ⬜ Not started | Can trail M4/M6 |
+| M9 — Admin shell | 7 | ⬜ Not started | Needs M2 |
+| M10 — Admin feature screens | 8 | ⬜ Not started | Needs M9 + corresponding M4/M6/M8 module |
+| M11 — POPIA finalization | 9 | ⬜ Not started — **gated on stakeholder retention-period answer** | Track as external dependency |
+| M12 — Deployment | 10 | ⬜ Not started | Can start infra prep anytime; first real deploy needs M5+M7 buildable |
+| M13 — Testing/launch readiness | 11 | ⬜ Not started | Interleave fitness-function tests with their corresponding module phase; final smoke-test pass gates launch |
 
 **Critical-path observation**: the longest dependency chain is `Phase 1 (schema) → Phase 3 (auth) → Phase 7 (admin shell) → Phase 8 (admin screens) → Phase 11 (sign-off)`, with `Phase 4 → Phase 6 (public data wiring)` as a parallel branch that must also complete before a meaningful first deploy. Phase 5 (branding port) is the only large chunk of work with zero backend dependency — front-load it to keep the frontend specialist productive while backend phases 1-4 are underway.
 
