@@ -57,6 +57,9 @@ export interface MediaRepository {
    */
   listByOwner(ownerType: MediaOwnerType, ownerId: string): Promise<MediaAsset[]>;
 
+  /** Updates the `displaySize` field for a single `MediaAsset` row. */
+  updateDisplaySize(id: string, displaySize: string): Promise<MediaAsset>;
+
   /**
    * Hard-deletes a single `MediaAsset` row by `id`. The caller (service
    * layer) is responsible for unlinking the on-disk file BEFORE calling this
@@ -101,6 +104,10 @@ export function createMediaRepository({ db }: MediaRepositoryOptions): MediaRepo
         where: { ownerType, ownerId },
         orderBy: { sortOrder: 'asc' },
       });
+    },
+
+    async updateDisplaySize(id, displaySize) {
+      return db.mediaAsset.update({ where: { id }, data: { displaySize } });
     },
 
     async deleteById(id) {

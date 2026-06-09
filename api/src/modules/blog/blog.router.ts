@@ -66,6 +66,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { validate } from '../../middleware/validate';
 import { requireRole } from '../../middleware/rbac';
 import type { AuthService } from '../auth/auth.service';
+import type { MediaRepository } from '../media/media.repository';
 import type { BlogService } from './blog.service';
 import {
   createPostSchema,
@@ -85,6 +86,7 @@ import {
 export interface CreateBlogRouterOptions {
   authService: AuthService;
   blogService: BlogService;
+  mediaRepository: MediaRepository;
 }
 
 /**
@@ -100,7 +102,7 @@ function postResponse(post: unknown): { post: unknown } {
 }
 
 export function createBlogRouter(options: CreateBlogRouterOptions): Router {
-  const { authService, blogService } = options;
+  const { authService, blogService, mediaRepository } = options;
   const router = Router();
 
   // The single shared role gate for every `/admin/blog/*` route — named once
@@ -156,13 +158,14 @@ export function createBlogRouter(options: CreateBlogRouterOptions): Router {
   router.get(
     '/blog/posts/:slug',
     validate({ params: slugParamSchema }),
-    (req: Request<SlugParam>, res: Response, next: NextFunction) => {
-      blogService
-        .getPublishedBySlug(req.params.slug)
-        .then((post) => {
-          res.status(200).json(postResponse(post));
-        })
-        .catch(next);
+    async (req: Request<SlugParam>, res: Response, next: NextFunction) => {
+      try {
+        const post = await blogService.getPublishedBySlug(req.params.slug);
+        const images = await mediaRepository.listByOwner('BLOG_POST', post.id);
+        res.status(200).json(postResponse({ ...post, images }));
+      } catch (err) {
+        next(err);
+      }
     },
   );
 

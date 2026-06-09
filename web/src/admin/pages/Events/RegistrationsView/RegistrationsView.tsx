@@ -25,16 +25,21 @@ export function RegistrationsView() {
 
   const { data: event, isLoading: eventLoading } = useQuery<AdminEvent>({
     queryKey: ['adminEvent', id],
-    queryFn: () => apiFetch<AdminEvent>(`/api/v1/admin/events/${id}`),
+    queryFn: async () => {
+      const res = await apiFetch<{ event: AdminEvent }>(`/api/v1/admin/events/${id}`);
+      return res.event;
+    },
     enabled: !!id,
   });
 
   const { data, isLoading, isError, error } = useQuery<RegistrationsPage>({
     queryKey: ['adminRegistrations', id],
-    queryFn: () =>
-      apiFetch<RegistrationsPage>(
+    queryFn: async () => {
+      const res = await apiFetch<{ registrations: RegistrationsPage }>(
         `/api/v1/admin/events/${id}/registrations?limit=${PAGE_LIMIT}`
-      ),
+      );
+      return res.registrations;
+    },
     enabled: !!id,
   });
 

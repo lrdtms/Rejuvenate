@@ -389,7 +389,8 @@ model MediaAsset {
   ownerType MediaOwnerType
   ownerId   String
 
-  sortOrder Int      @default(0)
+  sortOrder   Int    @default(0)
+  displaySize String @default("full")
   createdAt DateTime @default(now())
 
   // Supports the common "fetch all media for this owner, in order" query.

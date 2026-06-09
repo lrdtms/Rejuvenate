@@ -48,50 +48,66 @@ committed `package-lock.json`.
 
 ### Prerequisites
 
-- Node.js — see [`.nvmrc`](./.nvmrc) for the version to use (`nvm use`). The same
-  major version must be installed on the production VPS (Phase 10).
-- Docker (for the local Postgres instance) — or a locally-installed Postgres 16 if
-  you prefer not to use Docker.
+- Node.js — see [`.nvmrc`](./.nvmrc) for the pinned version (`nvm use`). The same
+  major version must be on the production VPS (Phase 10).
+- Docker — for the local Postgres 16 instance. Or a locally-installed Postgres 16
+  configured to match the credentials in `api/.env.example`.
 
-### 1. Start the local database
+### 1. Start the database
 
 ```sh
 docker compose up -d
 ```
 
-This starts a `postgres:16` container (pinned — not `:latest`, to match the
-production major version exactly) on `127.0.0.1:5432`, with credentials matching the
-default `DATABASE_URL` in `api/.env.example`. Data persists in a named Docker volume
-across restarts; `docker compose down -v` wipes it if you want a clean slate.
+Starts a `postgres:16` container on `127.0.0.1:5432` with the credentials from
+`api/.env.example`. Data persists in a named Docker volume across restarts;
+`docker compose down -v` wipes it for a clean slate.
 
-### 2. Run the API
+### 2. Start the API
 
 ```sh
 cd api
-cp .env.example .env     # then fill in real values — see "Configuration" below
+cp .env.example .env          # fill in SESSION_SECRET at minimum; all other defaults work for local dev
 npm install
-npm run dev              # tsx watch — reloads on file changes
+npm run prisma:generate       # generate the Prisma client from schema.prisma
+npm run prisma:deploy         # apply all migrations to the local DB
+npm run prisma:seed           # create the bootstrap ADMIN account + CMS slot registry rows
+npm run dev                   # tsx watch — reloads on every file change
 ```
 
-Other useful scripts in `api/`: `npm run build`, `npm run typecheck`, `npm run lint`,
-`npm run format`, and (once Phase 1 lands a Prisma schema) `npm run prisma:migrate` /
-`npm run prisma:seed`. See `api/package.json` for the full list.
+The API listens at **`http://localhost:3000`**. Confirm it's healthy:
 
-The API serves a health check at `GET /api/v1/healthz` (checks DB connectivity —
-returns `503` with a clear "Prisma client not generated yet" message until the Phase
-1 schema exists and `prisma generate` has run; this is expected on a fresh checkout).
+```
+GET http://localhost:3000/api/v1/healthz  →  200 OK
+```
 
-### 3. Run the SPA
+> **Bootstrap admin credentials**: `prisma:seed` prints the ADMIN email and a
+> randomly-generated temporary password to the console **once**. Note it before the
+> output scrolls — you need it to log into `/admin`.
+
+### 3. Start the SPA
 
 ```sh
 cd web
+cp .env.example .env          # VITE_API_BASE_URL defaults to http://localhost:3000 — correct for local dev
 npm install
-npm run dev
+npm run dev                   # Vite dev server with HMR
 ```
 
-(`web/` is scaffolded by the frontend specialist — see its own README/config for
-exact commands once it exists. `VITE_API_BASE_URL` should point at the local API,
-e.g. `http://localhost:3000/api/v1`.)
+The SPA is served at **`http://localhost:5173`**. The admin area is at `/admin`.
+
+### Useful scripts
+
+| Directory | Command | What it does |
+|---|---|---|
+| `api/` | `npm test` | Run the full Vitest suite |
+| `api/` | `npm run typecheck` | TypeScript type-check (no emit) |
+| `api/` | `npm run lint` | ESLint |
+| `api/` | `npm run prisma:migrate` | Create a new migration interactively (dev only) |
+| `api/` | `npm run prisma:seed` | Re-seed (idempotent — safe to re-run on existing data) |
+| `web/` | `npm run typecheck` | TypeScript type-check |
+| `web/` | `npm run lint` | ESLint |
+| `web/` | `npm run build` | Production build into `web/dist/` |
 
 ## Configuration
 

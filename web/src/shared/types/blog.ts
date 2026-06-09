@@ -17,6 +17,7 @@ export interface BlogPost {
     id: string;
     email: string;
   };
+  images: { id: string; url: string; altText: string | null }[];
   createdAt: string;
   updatedAt: string;
 }

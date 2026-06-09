@@ -15,6 +15,7 @@ export interface Event {
   branch: 'CAPE_TOWN' | 'DURBAN';
   status: string;
   capacity: number | null;
+  images: { id: string; url: string; altText: string | null; displaySize: string }[];
   createdAt: string;
   updatedAt: string;
 }

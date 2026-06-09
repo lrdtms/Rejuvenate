@@ -89,6 +89,7 @@ export interface MediaAsset {
   ownerId: string;
   sizeBytes: number;
   mimeType: string;
+  displaySize: 'small' | 'medium' | 'full';
   createdAt: string;
 }
 

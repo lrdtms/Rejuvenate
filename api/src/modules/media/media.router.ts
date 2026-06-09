@@ -53,9 +53,11 @@ import { isMulterFileSizeError, type MediaService } from './media.service';
 import {
   listQuerySchema,
   mediaIdParamSchema,
+  updateMediaBodySchema,
   uploadBodySchema,
   type ListQuery,
   type MediaIdParam,
+  type UpdateMediaBody,
   type UploadBody,
 } from './media.schemas';
 import { MAX_FILE_SIZE_BYTES } from './media.constants';
@@ -156,6 +158,21 @@ export function createMediaRouter(options: CreateMediaRouterOptions): Router {
         .then((result) => {
           res.status(200).json(result);
         })
+        .catch(next);
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // PATCH /admin/media/:id — update display size
+  // ---------------------------------------------------------------------------
+  router.patch(
+    '/admin/media/:id',
+    requireMediaStaff,
+    validate({ params: mediaIdParamSchema, body: updateMediaBodySchema }),
+    (req: Request<MediaIdParam, unknown, UpdateMediaBody>, res: Response, next: NextFunction) => {
+      mediaService
+        .updateDisplaySize(req.user!, req.params.id, req.body.displaySize)
+        .then(() => res.status(204).send())
         .catch(next);
     },
   );

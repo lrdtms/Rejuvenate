@@ -26,9 +26,17 @@ import '@/admin/admin.css';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
 
+// Strip HTML tags to check actual text length — mirrors the backend's
+// MIN_TITLE_LENGTH=3 and MIN_BODY_LENGTH=10 after .trim()
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '').trim();
+}
+
 const postSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  body: z.string().min(1, 'Body is required'),
+  title: z.string().min(3, 'Title must be at least 3 characters'),
+  body: z
+    .string()
+    .refine((val) => stripHtml(val).length >= 10, 'Body must be at least 10 characters'),
 });
 
 type PostFormValues = z.infer<typeof postSchema>;
@@ -65,7 +73,10 @@ export function PostEditor() {
   // Fetch existing post in edit mode
   const { data: post, isLoading: postLoading } = useQuery<AdminBlogPost>({
     queryKey: ['adminBlogPost', id],
-    queryFn: () => apiFetch<AdminBlogPost>(`/api/v1/admin/blog/posts/${id}`),
+    queryFn: async () => {
+      const res = await apiFetch<{ post: AdminBlogPost }>(`/api/v1/admin/blog/posts/${id}`);
+      return res.post;
+    },
     enabled: !isNew,
   });
 
@@ -92,11 +103,13 @@ export function PostEditor() {
   }
 
   const createMutation = useMutation({
-    mutationFn: (values: PostFormValues) =>
-      apiFetch<AdminBlogPost>('/api/v1/admin/blog/posts', {
+    mutationFn: async (values: PostFormValues) => {
+      const res = await apiFetch<{ post: AdminBlogPost }>('/api/v1/admin/blog/posts', {
         method: 'POST',
         body: JSON.stringify(values),
-      }),
+      });
+      return res.post;
+    },
     onSuccess: (created) => {
       invalidateCaches();
       navigate(`/admin/blog/${created.id}/edit`, { replace: true });
@@ -133,6 +146,18 @@ export function PostEditor() {
     onSuccess: () => invalidateCaches(),
     onError: (err) => {
       setActionError(isApiError(err) ? err.body.message : 'Unpublish failed');
+    },
+  });
+
+  const deleteMediaMutation = useMutation({
+    mutationFn: (assetId: string) =>
+      apiFetch<void>(`/api/v1/admin/media/${assetId}`, { method: 'DELETE' }),
+    onSuccess: (_data, assetId) => {
+      setUploadedMedia((prev) => prev.filter((a) => a.id !== assetId));
+      queryClient.invalidateQueries({ queryKey: ['adminBlogMedia', id] });
+    },
+    onError: (err) => {
+      setActionError(isApiError(err) ? err.body.message : 'Delete failed');
     },
   });
 
@@ -312,7 +337,6 @@ export function PostEditor() {
             value={bodyField.value}
             onChange={bodyField.onChange}
             mediaOwner={!isNew && id ? { ownerType: 'BLOG_POST', ownerId: id } : undefined}
-            onMediaUploaded={handleMediaUploaded}
           />
         </div>
 
@@ -378,6 +402,15 @@ export function PostEditor() {
                   <span className="admin-media-item-url" title={asset.url}>
                     {asset.url.split('/').pop()}
                   </span>
+                  <button
+                    type="button"
+                    className="admin-media-item-delete"
+                    onClick={() => deleteMediaMutation.mutate(asset.id)}
+                    disabled={deleteMediaMutation.isPending}
+                    aria-label={`Delete ${asset.url.split('/').pop()}`}
+                  >
+                    Delete
+                  </button>
                 </div>
               ))}
             </div>

@@ -465,6 +465,57 @@
   display: block;
 }
 
+.admin-media-item-delete {
+  display: block;
+  width: 100%;
+  padding: 0.25rem 0.35rem;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--line);
+  color: #ff6b6b;
+  font-size: 0.72rem;
+  cursor: pointer;
+  text-align: center;
+}
+.admin-media-item-delete:hover:not(:disabled) {
+  background: rgba(255, 107, 107, 0.1);
+}
+.admin-media-item-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-media-size-buttons {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem 0.35rem;
+  border-top: 1px solid var(--line);
+}
+.admin-media-size-btn {
+  flex: 1;
+  padding: 0.2rem 0;
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.admin-media-size-btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.admin-media-size-btn:hover:not(:disabled):not(.is-active) {
+  background: var(--line);
+  color: var(--text);
+}
+.admin-media-size-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── TipTap editor ────────────────────────────────────────────────────── */
 .tiptap-wrapper {
   border: 1px solid var(--line);
@@ -589,6 +640,21 @@
   height: auto;
   border-radius: 6px;
   margin: 0.5em 0;
+}
+
+.tiptap-insert-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border-top: 1px solid var(--line);
+  background: var(--panel-strong);
+  flex-wrap: wrap;
+}
+.tiptap-insert-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 /* ── CMS SlotEditor ──────────────────────────────────────────────────── */

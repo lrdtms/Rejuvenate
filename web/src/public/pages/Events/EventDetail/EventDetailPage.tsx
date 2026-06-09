@@ -64,6 +64,20 @@ export function EventDetailPage() {
           <p className="event-detail-description">{data.description}</p>
         )}
 
+        {data.images && data.images.length > 0 && (
+          <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {data.images.map((img) => (
+              <img
+                key={img.id}
+                src={img.url}
+                alt={img.altText ?? ''}
+                loading="lazy"
+                className={`event-image event-image--${img.displaySize ?? 'full'}`}
+              />
+            ))}
+          </div>
+        )}
+
         {/* RSVP / registration section */}
         {hasStarted ? (
           <p style={{ color: 'var(--muted)', marginTop: '2rem' }}>

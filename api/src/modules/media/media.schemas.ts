@@ -57,6 +57,14 @@ export type UploadBody = z.infer<typeof uploadBodySchema>;
  * service's ownership check (same logic as upload) ensures the caller may
  * only list assets for owners they can edit.
  */
+/** Body for `PATCH /admin/media/:id` — updates display size. */
+export const updateMediaBodySchema = z.object({
+  displaySize: z.enum(['small', 'medium', 'full'], {
+    message: 'displaySize must be small, medium, or full',
+  }),
+});
+export type UpdateMediaBody = z.infer<typeof updateMediaBodySchema>;
+
 export const listQuerySchema = z.object({
   ownerType: z.enum(['BLOG_POST', 'EVENT'] satisfies [MediaOwnerType, MediaOwnerType], {
     message: 'ownerType must be BLOG_POST or EVENT',

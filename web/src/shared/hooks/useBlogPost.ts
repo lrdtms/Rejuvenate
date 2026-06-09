@@ -16,7 +16,8 @@ export function useBlogPost(slug: string) {
     queryKey: ['blog', 'post', slug],
     queryFn: async () => {
       try {
-        return await apiFetch<BlogPost>(`/api/v1/blog/posts/${encodeURIComponent(slug)}`);
+        const res = await apiFetch<{ post: BlogPost }>(`/api/v1/blog/posts/${encodeURIComponent(slug)}`);
+        return res.post;
       } catch (err) {
         if (isApiError(err) && err.status === 404) {
           return null;

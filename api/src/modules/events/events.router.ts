@@ -68,6 +68,7 @@ import { z } from 'zod';
 import { validate } from '../../middleware/validate';
 import { requireRole } from '../../middleware/rbac';
 import type { AuthService } from '../auth/auth.service';
+import type { MediaRepository } from '../media/media.repository';
 import type { EventService } from './events.service';
 import {
   createEventSchema,
@@ -88,6 +89,7 @@ import {
 export interface CreateEventRouterOptions {
   authService: AuthService;
   eventService: EventService;
+  mediaRepository: MediaRepository;
 }
 
 /** Keeps the `{ event: {...} }` single-resource response shape consistent
@@ -113,7 +115,7 @@ const transitionStatusSchema = z.object({ to: eventStatusSchema });
 type TransitionStatusInput = z.infer<typeof transitionStatusSchema>;
 
 export function createEventRouter(options: CreateEventRouterOptions): Router {
-  const { authService, eventService } = options;
+  const { authService, eventService, mediaRepository } = options;
   const router = Router();
 
   // The single shared role gate for every `/admin/events/*` route — named
@@ -167,13 +169,14 @@ export function createEventRouter(options: CreateEventRouterOptions): Router {
   router.get(
     '/events/:slug',
     validate({ params: slugParamSchema }),
-    (req: Request<SlugParam>, res: Response, next: NextFunction) => {
-      eventService
-        .getPublishedBySlug(req.params.slug)
-        .then((event) => {
-          res.status(200).json(eventResponse(event));
-        })
-        .catch(next);
+    async (req: Request<SlugParam>, res: Response, next: NextFunction) => {
+      try {
+        const event = await eventService.getPublishedBySlug(req.params.slug);
+        const images = await mediaRepository.listByOwner('EVENT', event.id);
+        res.status(200).json(eventResponse({ ...event, images }));
+      } catch (err) {
+        next(err);
+      }
     },
   );
 

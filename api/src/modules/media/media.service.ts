@@ -199,6 +199,12 @@ export interface MediaService {
    * ownership before calling their own `deletePost`/`deleteEvent`.
    */
   cascadeDeleteForOwner(ownerType: MediaOwnerType, ownerId: string): Promise<void>;
+
+  /**
+   * Updates the `displaySize` field for a single `MediaAsset`.
+   * Ownership-checked — same predicate as `upload`/`deleteAsset`.
+   */
+  updateDisplaySize(actor: AuthenticatedUser, id: string, displaySize: string): Promise<void>;
 }
 
 /** Derives the absolute on-disk path for a stored file given its `url` field
@@ -351,6 +357,13 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
 
       const items = await options.repository.listByOwner(ownerType, ownerId);
       return { items };
+    },
+
+    async updateDisplaySize(actor, id, displaySize) {
+      const asset = await options.repository.findById(id);
+      if (!asset) throw notFound('Media asset not found');
+      await checkOwnerAccess(actor, asset.ownerType, asset.ownerId);
+      await options.repository.updateDisplaySize(id, displaySize);
     },
 
     async cascadeDeleteForOwner(ownerType, ownerId) {

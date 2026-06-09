@@ -14,7 +14,8 @@ export function useEvent(slug: string) {
     queryKey: ['events', 'detail', slug],
     queryFn: async () => {
       try {
-        return await apiFetch<Event>(`/api/v1/events/${encodeURIComponent(slug)}`);
+        const res = await apiFetch<{ event: Event }>(`/api/v1/events/${encodeURIComponent(slug)}`);
+        return res.event;
       } catch (err) {
         if (isApiError(err) && err.status === 404) {
           return null;

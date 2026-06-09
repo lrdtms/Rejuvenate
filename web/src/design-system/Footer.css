@@ -28,3 +28,19 @@
   text-decoration: underline;
   text-underline-offset: 0.25em;
 }
+
+.site-footer nav {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.footer-staff-link {
+  font-size: 0.8rem;
+  opacity: 0.5;
+}
+
+.footer-staff-link:hover,
+.footer-staff-link:focus-visible {
+  opacity: 1;
+}

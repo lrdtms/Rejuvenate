@@ -30,7 +30,8 @@ export function useCurrentUser(): {
     queryKey: CURRENT_USER_QUERY_KEY,
     queryFn: async () => {
       try {
-        return await apiFetch<CurrentUser>('/api/v1/me');
+        const res = await apiFetch<{ user: CurrentUser | null }>('/api/v1/me');
+        return res.user;
       } catch (err) {
         // 401 means "not logged in" — not an error to surface
         if (isApiError(err) && err.status === 401) {

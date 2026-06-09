@@ -9,7 +9,7 @@
  *  ownerId    — the saved post/event id (caller must ensure the entity exists first)
  *  onUploaded — called with the MediaAsset on successful upload
  */
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { MediaAsset } from '@/shared/types';
 import { isApiError } from '@/shared/api/client';
 
@@ -19,9 +19,13 @@ interface ImageUploadFieldProps {
   ownerType: 'BLOG_POST' | 'EVENT';
   ownerId: string;
   onUploaded: (asset: MediaAsset) => void;
+  /** Render as an inline button (no label block) — used in the RichTextEditor insert bar. */
+  compact?: boolean;
 }
 
-export function ImageUploadField({ ownerType, ownerId, onUploaded }: ImageUploadFieldProps) {
+export function ImageUploadField({ ownerType, ownerId, onUploaded, compact }: ImageUploadFieldProps) {
+  const uid = useId();
+  const inputId = `image-upload-input-${uid}`;
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPending, setIsPending] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -37,6 +41,7 @@ export function ImageUploadField({ ownerType, ownerId, onUploaded }: ImageUpload
     form.append('file', file);
     form.append('ownerType', ownerType);
     form.append('ownerId', ownerId);
+    form.append('altText', file.name);
 
     try {
       // Do NOT set Content-Type here — let the browser set the multipart boundary.
@@ -75,19 +80,50 @@ export function ImageUploadField({ ownerType, ownerId, onUploaded }: ImageUpload
     }
   }
 
+  if (compact) {
+    return (
+      <>
+        <button
+          type="button"
+          className="tiptap-toolbar-btn"
+          onClick={() => inputRef.current?.click()}
+          disabled={isPending}
+          title="Upload image at cursor position"
+        >
+          {isPending ? 'Uploading…' : '+ Image'}
+        </button>
+        <input
+          id={inputId}
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          disabled={isPending}
+          onChange={handleChange}
+          style={{ display: 'none' }}
+          aria-label="Upload image"
+        />
+        {errorMsg && (
+          <span className="image-upload-error" role="alert" style={{ fontSize: '0.78rem' }}>
+            {errorMsg}
+          </span>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="image-upload-field">
-      <label htmlFor="image-upload-input">Upload image</label>
+      <label htmlFor={inputId}>Upload image</label>
       <input
-        id="image-upload-input"
+        id={inputId}
         ref={inputRef}
         type="file"
         accept="image/jpeg,image/png,image/gif,image/webp"
         disabled={isPending}
         onChange={handleChange}
-        aria-describedby={errorMsg ? 'image-upload-error' : 'image-upload-hint'}
+        aria-describedby={errorMsg ? `${inputId}-error` : `${inputId}-hint`}
       />
-      <span id="image-upload-hint" className="image-upload-hint">
+      <span id={`${inputId}-hint`} className="image-upload-hint">
         JPEG, PNG, GIF or WebP
       </span>
       {isPending && (
@@ -96,7 +132,7 @@ export function ImageUploadField({ ownerType, ownerId, onUploaded }: ImageUpload
         </span>
       )}
       {errorMsg && (
-        <span id="image-upload-error" className="image-upload-error" role="alert">
+        <span id={`${inputId}-error`} className="image-upload-error" role="alert">
           {errorMsg}
         </span>
       )}

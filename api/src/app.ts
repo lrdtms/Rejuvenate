@@ -15,6 +15,7 @@
  * middleware and feature module routers are added in subsequent phases per
  * plan.md.
  */
+import * as path from 'node:path';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type Request, type Response, type NextFunction } from 'express';
@@ -308,7 +309,7 @@ export function createApp(options: CreateAppOptions = {}) {
   });
 
   const blogService = createBlogService({ repository: blogRepository, mediaService });
-  router.use(createBlogRouter({ authService, blogService }));
+  router.use(createBlogRouter({ authService, blogService, mediaRepository }));
 
   // ---------------------------------------------------------------------------
   // Events module (plan.md Phase 4b) — mounted AFTER Blog, in the same
@@ -323,7 +324,7 @@ export function createApp(options: CreateAppOptions = {}) {
   // 4c's `RegistrationService` will receive via the identical DI pattern
   // once that module exists.
   const eventService = createEventService({ repository: eventRepository, mediaService });
-  router.use(createEventRouter({ authService, eventService }));
+  router.use(createEventRouter({ authService, eventService, mediaRepository }));
 
   // ---------------------------------------------------------------------------
   // Registrations module (plan.md Phase 4c) — mounted AFTER Events, the module
@@ -416,6 +417,13 @@ export function createApp(options: CreateAppOptions = {}) {
   options.mountForTesting?.(router);
 
   app.use('/api/v1', router);
+
+  // Serve uploaded media files at /media/* — mirrors the Nginx location block
+  // planned for production (media.constants.ts). In dev there is no Nginx, so
+  // Express handles it directly. In production this middleware is reached only
+  // if Nginx hasn't already served the file (belt-and-suspenders: harmless
+  // overhead for a request that should never arrive here in prod).
+  app.use('/media', express.static(path.resolve(env.UPLOADS_DIR)));
 
   // 404 handler for unmatched routes — consistent error shape.
   app.use((_req: Request, res: Response) => {

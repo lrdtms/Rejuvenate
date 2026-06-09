@@ -27,8 +27,14 @@ export function useCmsSlots(keys: string[]): {
 
   const { data, isLoading, error } = useQuery<Record<string, CmsSlotView>>({
     queryKey: ['cms', joined],
-    queryFn: () => apiFetch<Record<string, CmsSlotView>>(`/api/v1/cms?keys=${encodeURIComponent(joined)}`),
-    staleTime: 30 * 60 * 1000, // 30 minutes — CMS content changes rarely
+    queryFn: async () => {
+      const res = await apiFetch<{ slots: Record<string, CmsSlotView> }>(
+        `/api/v1/cms?keys=${encodeURIComponent(joined)}`,
+        { cache: 'no-store' },
+      );
+      return res.slots;
+    },
+    staleTime: 0,
     enabled: keys.length > 0,
   });
 

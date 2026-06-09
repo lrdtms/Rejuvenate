@@ -12,11 +12,26 @@
  * Wired as a controlled field via props (value + onChange) so the parent
  * can use useController from React Hook Form.
  */
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
+
+// Extends the base Image extension with a `data-size` attribute so images
+// can be resized inside the editor and the attribute survives sanitization.
+const SizedImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      size: {
+        default: 'full',
+        parseHTML: (el) => el.getAttribute('data-size') ?? 'full',
+        renderHTML: (attrs) => ({ 'data-size': attrs.size as string }),
+      },
+    };
+  },
+});
 import type { MediaAsset } from '@/shared/types';
 import { ImageUploadField } from './ImageUploadField';
 
@@ -25,10 +40,15 @@ interface RichTextEditorProps {
   onChange: (html: string) => void;
   /** If provided, show the image upload widget bound to this post/event */
   mediaOwner?: { ownerType: 'BLOG_POST' | 'EVENT'; ownerId: string };
-  onMediaUploaded?: (asset: MediaAsset) => void;
 }
 
-export function RichTextEditor({ value, onChange, mediaOwner, onMediaUploaded }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, mediaOwner }: RichTextEditorProps) {
+  // Saved when the editor loses focus so image uploads can restore cursor position.
+  const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
+  // Force re-render when TipTap selection changes — needed so isActive('image')
+  // becomes reactive (useEditor alone doesn't re-render on selection-only changes).
+  const [, rerender] = useState(0);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -40,12 +60,16 @@ export function RichTextEditor({ value, onChange, mediaOwner, onMediaUploaded }:
         // Keep: paragraph, heading, bold, italic, lists, blockquote, hardBreak
         heading: { levels: [2, 3, 4] },
       }),
-      Image.configure({ allowBase64: false }),
+      SizedImage.configure({ allowBase64: false }),
       Link.configure({ openOnClick: false, autolink: false }),
     ],
     content: value,
     onUpdate({ editor: e }) {
       onChange(e.getHTML());
+    },
+    onBlur({ editor: e }) {
+      const { from, to } = e.state.selection;
+      savedSelectionRef.current = { from, to };
     },
   });
 
@@ -54,10 +78,17 @@ export function RichTextEditor({ value, onChange, mediaOwner, onMediaUploaded }:
     if (!editor) return;
     const currentHTML = editor.getHTML();
     if (currentHTML !== value) {
-      // setContent without emitting update event
       editor.commands.setContent(value, { emitUpdate: false });
     }
   }, [value, editor]);
+
+  // Re-render toolbar whenever the selection moves so isActive('image') reflects reality.
+  useEffect(() => {
+    if (!editor) return;
+    const handler = () => rerender((n) => n + 1);
+    editor.on('selectionUpdate', handler);
+    return () => { editor.off('selectionUpdate', handler); };
+  }, [editor]);
 
   const setLink = useCallback(() => {
     if (!editor) return;
@@ -79,11 +110,13 @@ export function RichTextEditor({ value, onChange, mediaOwner, onMediaUploaded }:
   }, [editor]);
 
   const handleUploaded = useCallback((asset: MediaAsset) => {
-    if (editor) {
-      editor.chain().focus().setImage({ src: asset.url, alt: asset.altText ?? '' }).run();
-    }
-    onMediaUploaded?.(asset);
-  }, [editor, onMediaUploaded]);
+    if (!editor) return;
+    const sel = savedSelectionRef.current;
+    const chain = sel
+      ? editor.chain().setTextSelection(sel).focus()
+      : editor.chain().focus();
+    chain.setImage({ src: asset.url, alt: asset.altText ?? '' }).run();
+  }, [editor]);
 
   if (!editor) return null;
 
@@ -92,7 +125,7 @@ export function RichTextEditor({ value, onChange, mediaOwner, onMediaUploaded }:
       key={label}
       type="button"
       className={['tiptap-toolbar-btn', active ? 'is-active' : ''].filter(Boolean).join(' ')}
-      onClick={action}
+      onMouseDown={(e) => { e.preventDefault(); action(); }}
       title={title ?? label}
       aria-pressed={active}
     >
@@ -120,20 +153,60 @@ export function RichTextEditor({ value, onChange, mediaOwner, onMediaUploaded }:
         {btn('Link', setLink, editor.isActive('link'), 'Insert / edit link')}
         {divider('d5')}
         {btn('Image URL', insertImageByUrl, false, 'Insert image by URL')}
+        {editor.isActive('image') && (
+          <>
+            {divider('d6')}
+            {(['small', 'medium', 'full'] as const).map((size) => {
+              const current = (editor.getAttributes('image').size as string | undefined) ?? 'full';
+              return (
+                <button
+                  key={size}
+                  type="button"
+                  className={['tiptap-toolbar-btn', current === size ? 'is-active' : ''].filter(Boolean).join(' ')}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    editor.chain().focus().updateAttributes('image', { size }).run();
+                  }}
+                  title={`Image size: ${size}`}
+                  aria-pressed={current === size}
+                >
+                  {size === 'small' ? 'S' : size === 'medium' ? 'M' : 'F'}
+                </button>
+              );
+            })}
+          </>
+        )}
       </div>
 
-      {mediaOwner && (
-        <div style={{ padding: '0 0.6rem 0.5rem' }}>
+      <div className="tiptap-editor-content">
+        <EditorContent editor={editor} />
+      </div>
+
+      {/* Insert-at-cursor bar. The paragraph button uses onMouseDown +
+          preventDefault so the editor never loses focus — cursor stays put.
+          The image button opens a file dialog (editor will blur), so the
+          saved selection from onBlur is restored in handleUploaded. */}
+      <div className="tiptap-insert-bar">
+        <span className="tiptap-insert-label">Add at cursor:</span>
+        <button
+          type="button"
+          className="tiptap-toolbar-btn"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            editor.chain().focus().insertContent({ type: 'paragraph' }).run();
+          }}
+          title="Insert a new paragraph at cursor position"
+        >
+          + Paragraph
+        </button>
+        {mediaOwner && (
           <ImageUploadField
             ownerType={mediaOwner.ownerType}
             ownerId={mediaOwner.ownerId}
             onUploaded={handleUploaded}
+            compact
           />
-        </div>
-      )}
-
-      <div className="tiptap-editor-content">
-        <EditorContent editor={editor} />
+        )}
       </div>
     </div>
   );

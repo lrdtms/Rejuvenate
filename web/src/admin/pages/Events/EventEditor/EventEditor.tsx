@@ -46,12 +46,12 @@ function toDatetimeLocal(iso: string): string {
 }
 
 const eventSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  description: z.string().min(1, 'Description is required'),
+  title: z.string().min(3, 'Title must be at least 3 characters'),
+  description: z.string().min(10, 'Description must be at least 10 characters'),
   branch: z.enum(['CAPE_TOWN', 'DURBAN'], { message: 'Branch is required' }),
   startsAt: z.string().min(1, 'Start date/time is required'),
-  endsAt: z.string().optional(),
-  locationDetail: z.string().optional(),
+  endsAt: z.string().min(1, 'End date/time is required'),
+  locationDetail: z.string().min(3, 'Location detail must be at least 3 characters'),
   capacity: z.string().optional(),
 });
 
@@ -71,6 +71,7 @@ export function EventEditor() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [uploadedMedia, setUploadedMedia] = useState<MediaAsset[]>([]);
+  const [pendingSizeId, setPendingSizeId] = useState<string | null>(null);
 
   const {
     register,
@@ -93,15 +94,22 @@ export function EventEditor() {
   // Fetch existing event in edit mode
   const { data: event, isLoading: eventLoading } = useQuery<AdminEvent>({
     queryKey: ['adminEvent', id],
-    queryFn: () => apiFetch<AdminEvent>(`/api/v1/admin/events/${id}`),
+    queryFn: async () => {
+      const res = await apiFetch<{ event: AdminEvent }>(`/api/v1/admin/events/${id}`);
+      return res.event;
+    },
     enabled: !isNew,
   });
 
   // Fetch registration count for cancel confirmation
   const { data: regData } = useQuery<RegistrationsPage>({
     queryKey: ['adminEventRegs', id, 'count'],
-    queryFn: () =>
-      apiFetch<RegistrationsPage>(`/api/v1/admin/events/${id}/registrations?limit=1`),
+    queryFn: async () => {
+      const res = await apiFetch<{ registrations: RegistrationsPage }>(
+        `/api/v1/admin/events/${id}/registrations?limit=1`
+      );
+      return res.registrations;
+    },
     enabled: !isNew && !!id,
   });
 
@@ -136,7 +144,7 @@ export function EventEditor() {
   }
 
   const createMutation = useMutation({
-    mutationFn: (values: EventFormValues) => {
+    mutationFn: async (values: EventFormValues) => {
       const body: Record<string, unknown> = {
         title: values.title,
         description: values.description,
@@ -146,10 +154,11 @@ export function EventEditor() {
         locationDetail: values.locationDetail || undefined,
         capacity: values.capacity ? parseInt(values.capacity, 10) : undefined,
       };
-      return apiFetch<AdminEvent>('/api/v1/admin/events', {
+      const res = await apiFetch<{ event: AdminEvent }>('/api/v1/admin/events', {
         method: 'POST',
         body: JSON.stringify(body),
       });
+      return res.event;
     },
     onSuccess: (created) => {
       invalidateCaches();
@@ -195,6 +204,38 @@ export function EventEditor() {
     onError: (err) => {
       setActionError(isApiError(err) ? err.body.message : 'Status change failed');
       setCancelConfirm(false);
+    },
+  });
+
+  const deleteMediaMutation = useMutation({
+    mutationFn: (assetId: string) =>
+      apiFetch<void>(`/api/v1/admin/media/${assetId}`, { method: 'DELETE' }),
+    onSuccess: (_data, assetId) => {
+      setUploadedMedia((prev) => prev.filter((a) => a.id !== assetId));
+      queryClient.invalidateQueries({ queryKey: ['adminEventMedia', id] });
+    },
+    onError: (err) => {
+      setActionError(isApiError(err) ? err.body.message : 'Delete failed');
+    },
+  });
+
+  const updateSizeMutation = useMutation({
+    mutationFn: ({ assetId, displaySize }: { assetId: string; displaySize: string }) =>
+      apiFetch<void>(`/api/v1/admin/media/${assetId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ displaySize }),
+      }),
+    onMutate: ({ assetId }) => setPendingSizeId(assetId),
+    onSuccess: (_data, { assetId, displaySize }) => {
+      setPendingSizeId(null);
+      setUploadedMedia((prev) =>
+        prev.map((a) => (a.id === assetId ? { ...a, displaySize: displaySize as MediaAsset['displaySize'] } : a))
+      );
+      queryClient.invalidateQueries({ queryKey: ['adminEventMedia', id] });
+    },
+    onError: (err) => {
+      setPendingSizeId(null);
+      setActionError(isApiError(err) ? err.body.message : 'Size update failed');
     },
   });
 
@@ -503,6 +544,32 @@ export function EventEditor() {
                   <span className="admin-media-item-url" title={asset.url}>
                     {asset.url.split('/').pop()}
                   </span>
+                  <div className="admin-media-size-buttons" aria-label="Display size">
+                    {(['small', 'medium', 'full'] as const).map((size) => (
+                      <button
+                        key={size}
+                        type="button"
+                        className={[
+                          'admin-media-size-btn',
+                          (asset.displaySize ?? 'full') === size ? 'is-active' : '',
+                        ].filter(Boolean).join(' ')}
+                        onClick={() => updateSizeMutation.mutate({ assetId: asset.id, displaySize: size })}
+                        disabled={pendingSizeId === asset.id}
+                        title={`Display size: ${size}`}
+                      >
+                        {size === 'small' ? 'S' : size === 'medium' ? 'M' : 'F'}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="admin-media-item-delete"
+                    onClick={() => deleteMediaMutation.mutate(asset.id)}
+                    disabled={deleteMediaMutation.isPending}
+                    aria-label={`Delete ${asset.url.split('/').pop()}`}
+                  >
+                    Delete
+                  </button>
                 </div>
               ))}
             </div>

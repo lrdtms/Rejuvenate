@@ -193,26 +193,47 @@ body.page-home {
 }
 
 .contact-form {
-  display: grid;
-  gap: 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* FormField renders a <div> — give each field proper spacing */
+.contact-form > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .contact-form label {
+  display: block;
   font-weight: 700;
+  font-size: 0.9rem;
 }
 
 .contact-form input,
 .contact-form textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   border: 1px solid rgba(177, 223, 255, 0.35);
   background: rgba(5, 15, 26, 0.85);
   color: var(--text);
   border-radius: 12px;
   padding: 0.66rem 0.72rem;
   font: inherit;
+  resize: vertical;
+}
+
+.contact-form input:focus,
+.contact-form textarea:focus {
+  outline: none;
+  border-color: rgba(91, 231, 255, 0.6);
+  box-shadow: 0 0 0 2px rgba(91, 231, 255, 0.15);
 }
 
 .contact-form button {
-  margin-top: 0.45rem;
+  margin-top: 0.25rem;
   border: 0;
   border-radius: 12px;
   padding: 0.75rem 0.95rem;
@@ -221,6 +242,7 @@ body.page-home {
   color: #00101a;
   background: linear-gradient(110deg, #5be7ff, #9ef2ff);
   cursor: pointer;
+  width: 100%;
 }
 
 .contact-form button:hover {
@@ -495,6 +517,16 @@ body.page-home {
   margin-bottom: 2rem;
 }
 
+/* ── Event image size variants ──────────────────────────────────────── */
+.event-image {
+  display: block;
+  border-radius: 8px;
+  height: auto;
+}
+.event-image--small  { max-width: 25%; }
+.event-image--medium { max-width: 50%; }
+.event-image--full   { max-width: 100%; }
+
 /* ── RSVP form ──────────────────────────────────────────────────────── */
 .rsvp-form-wrapper {
   background: var(--panel-strong);
@@ -619,6 +651,11 @@ body.page-home {
   color: var(--text);
   font-family: 'Space Grotesk', sans-serif;
 }
+
+.blog-post-body img                      { max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 0.75rem 0; }
+.blog-post-body img[data-size="small"]   { max-width: 25%; }
+.blog-post-body img[data-size="medium"]  { max-width: 50%; }
+.blog-post-body img[data-size="full"]    { max-width: 100%; }
 
 /* ── Keyframes ──────────────────────────────────────────────────────── */
 @keyframes fade-rise {

@@ -166,7 +166,7 @@ export const RICH_TEXT_ALLOW_LIST: sanitizeHtml.IOptions = {
   ],
   allowedAttributes: {
     a: ['href', 'rel', 'target'],
-    img: ['src', 'alt'],
+    img: ['src', 'alt', 'data-size'],
   },
   // Forces every surviving `<a>` to carry safe `rel`/`target` regardless of
   // what the editor produced — closes the `window.opener` reverse-tabnabbing

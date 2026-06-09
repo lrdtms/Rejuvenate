@@ -81,7 +81,7 @@ Steps:
 
 ---
 
-## Phase 2 — Backend Application Skeleton, Validation & Error Conventions
+## Phase 2 — Backend Application Skeleton, Validation & Error Conventions ✅ COMPLETED (2026-06-07)
 
 **Goal**: The Express app shell, shared conventions, and cross-cutting concerns that every module will use — built once, reused everywhere.
 
@@ -114,7 +114,6 @@ per-module.
 
 **Backend Review Note**: Add `app.set('trust proxy', 1)` (or the appropriate value) as an explicit step here — it's easy to forget, and without it, `express-rate-limit`, `express-session`'s `secure` cookie detection, and any IP-based logic will all silently misbehave behind Nginx. This single line is a recurring source of "rate limiting doesn't work in production but works locally" bugs.
 
-## Phase 2 — Backend Application Skeleton, Validation & Error Conventions ✅ COMPLETED (2026-06-07)
 
 > Done on `feature/dynamic-rewrite`: global middleware (`trust proxy 1`, `pino`/`pino-http` structured request logging mounted first so even body-parse-error requests are logged with cookies/auth headers redacted, credentialed CORS via an env-sourced `CORS_ALLOWED_ORIGIN` allow-list, `cookie-parser`, `express.json()`); the error taxonomy in `lib/errors.ts` extended with `validationError`/`capacityExceeded`/`unknownSlot`/`tooManyRequests` factories plus a single reference-table doc-comment documenting the full agreed status-code/`code`/factory contract for every module to throw into; a `validate({ body?, params?, query? })` Zod middleware factory (`middleware/validate.ts`) that aggregates issues from all three request parts into one `fields` map and forwards through the existing `AppError`/central-error-handler pipeline (the shared-Zod-schema-location decision is recorded just above and in that file's doc-comment); a generic, unmounted `rateLimiter({ windowMs, max })` factory (`middleware/rateLimit.ts`) using the default in-memory store with its single-instance/restart-reset limitation documented inline, shaping `429`s as `{ error: { code: 'RATE_LIMITED', message } }`; and `/healthz` hardened with a 2.5s `Promise.race` timeout (with proper timer cleanup) so a hung DB connection degrades to `503` rather than hanging the probe. All four tasks reviewed for spec compliance and code quality (one real defect found and fixed in each of the logging-order and timer-cleanup areas — see commit messages), lint/typecheck/test/build verified clean (38 tests passing). Commits: `5cbdb8e`, `4b0fce8`, `089ce2f`, `e86dd9f`, `275de55`, `a1c770f`.
 
@@ -134,7 +133,8 @@ per-module.
 >   - `requestPasswordReset(email)` / `confirmPasswordReset(token, newPassword)`: enumeration-safe by construction — `requestPasswordReset` ALWAYS returns the identical `{ message: PASSWORD_RESET_REQUEST_ACK_MESSAGE }` regardless of whether the account exists, is active, or the email send succeeds (verified by a dedicated test asserting byte-identical status/body/shape for an existing vs. nonexistent account — the exact test the brief required); old unused tokens are superseded (`usedAt` stamped) whenever a new one is issued; `confirmPasswordReset` collapses "unknown token" / "expired" / "already used" / "account deactivated since issuance" into one generic `unauthorized(...)`, and atomically marks-used + supersedes-siblings + updates the password hash inside a single `db.$transaction([...])`.
 >   - `modules/auth/mail.service.ts`: minimal `MailService` interface + `ConsoleMailService` (logs via the shared `pino` logger) — the stub the step-3 open question recommended; `env.SMTP_*` exist but are deliberately unused pending a provider decision (flagged inline).
 > - ✅ **Step 4 (Routes)**: `modules/auth/auth.router.ts` (`createAuthRouter({ authService })`) + `modules/auth/auth.schemas.ts` (Zod schemas, incl. `MIN_PASSWORD_LENGTH = 12`). All five routes wired and mounted in `app.ts` on the `/api/v1` router immediately after sessions: `POST /auth/login` (regenerates the session — fixation defense — then stamps `userId`; rate-limited per IP+email via a custom `keyGenerator`, `max: 10` / 15 min), `POST /auth/logout` (idempotent — 204 even with no session), `GET /me` (returns `{ user: null }` for anonymous callers — 200, deliberately NOT 401, since "am I logged in" is a routine UI query, not an authorization failure), `POST /auth/password-reset/request` (rate-limited, `max: 5` / 15 min, always 200 with the generic ack message), `POST /auth/password-reset/confirm` (deliberately NOT rate-limited — the token's 256-bit entropy is the actual defense; rate-limiting it would mostly inconvenience legitimate users retrying a copy-paste).
-> - ✅ **Step 5 (RBAC middleware)**: `middleware/rbac.ts` — `requireAuth(authService)` (401 `unauthorized()` if no session, no `userId` on the session, or `getCurrentUser` resolves to `null` — which by design covers BOTH "user deleted" and "user deactivated") and `requireRole(authService, ...roles)` (same 401 checks PLUS 403 `forbidden()` on role mismatch — performs its own full authentication check rather than assuming `requireAuth` ran first, so it's safe to use standalone). Both attach `req.user: AuthenticatedUser` on success (Express namespace augmentation). Deliberately shaped both factories as `fn(authService, ...)` for call-site consistency (reshaped `requireRole` from an initially-curried `(...roles) => (authService) => ...` design). Unit-tested against hand-rolled mock `req`/`res`/`next` and a fake `AuthService` — see `middleware/rbac.test.ts`'s decision-matrix table covering every combination of (no session / ghost session / wrong role / right role) × (`requireAuth` / `requireRole`).
+> - ✅ **Step 5 (RBAC middleware)**: `middleware/rbac.ts` — `requireAuth(authService)` (401 `unauthorized()` if no session, no `userId` on the session, or `getCurrentUser` resolves to `null` — which by design covers BOTH "user deleted" and "user deactivated") and `requireRole(authService, ...roles)` (same 401 checks PLUS 403 `forbidden()` on role mismatch — performs its own full authentication check rather than assuming `requireAuth` ran first, so it's safe to use standalone). Both attach `req.user: AuthenticatedUser` on success (Express namespace augmentation). Deliberately shaped both factories as `fn(authService, ...)` for call-site consistency (reshaped `requireRole` from an initially-curried `(...roles) => (authService) => ...` design). Unit-tested against hand-rolled mock `req`/`res`/`next` and a fake `AuthService` — see `middleware/rbac.test.ts`'s decision-matri
+x table covering every combination of (no session / ghost session / wrong role / right role) × (`requireAuth` / `requireRole`).
 >   - Note: not yet applied globally to an `/api/v1/admin/*` prefix as step 5's text suggests — no admin routes exist yet (Phase 4+). The middlewares are built, exported, and unit-tested as the "building blocks Phase 4 will apply globally," per the brief's framing; wiring them onto real route prefixes happens as those prefixes are built.
 > - ✅ **Step 6 (Ownership helpers)**: `modules/auth/ownership.ts` — `canEditPost(user, post): boolean` → `post.authorId === user.id || user.role === 'ADMIN'`, taking a minimal `OwnedPost = { authorId: string }` projection (callers don't need a full `BlogPost` row for an authorization pre-check). Decision-matrix-tested in `ownership.test.ts` (author-edits-own / non-author-denied / Admin-override / Admin-editing-own / Event-Manager-denied-elsewhere). Doc-comments document the SYMMETRIC pattern Phase 4e's `MediaService.upload` must follow: validate the client-supplied `ownerId` against the actual owning resource (don't trust it blindly) and run an analogous ownership predicate before persisting — flagged as a likely-to-be-missed gap since the architecture brief's ownership language focuses on blog posts.
 >
@@ -168,7 +168,7 @@ Steps:
 
 ---
 
-## Phase 4 — Backend Feature Modules (in dependency order)
+## Phase 4 — Backend Feature Modules (in dependency order) ✅ COMPLETED (2026-06-09)
 
 Build in this order because each has increasing dependency depth (Blog needs only User; Events needs User; Registrations need Event; CMS needs User for `lastEditedBy`; Media needs Blog/Event as owners).
 
@@ -1004,7 +1004,7 @@ Each screen is blocked on its corresponding backend module (Phase 4) AND the adm
 
 ---
 
-## Phase 9 — POPIA Compliance Completion (Retention Job, Audit, Consent Finalization)
+## Phase 9 — POPIA Compliance Completion (Retention Job, Audit, Consent Finalization) ⬜ PENDING — gated on stakeholder retention-period answer
 
 **Goal**: Close out the privacy-control mechanisms whose *values* depend on organizational/stakeholder decisions.
 
@@ -1029,7 +1029,7 @@ Steps (sequence once the answer arrives — but the *mechanism* should already b
 
 ---
 
-## Phase 10 — Deployment Setup (Linode VPS)
+## Phase 10 — Deployment Setup (Linode VPS) ⬜ PENDING
 
 **Goal**: Stand up the production topology described in architecture.md §11 — can begin in parallel with later feature phases (it's infrastructure work, not feature work) but the *first deploy* naturally happens once Phases 1-8 produce a buildable artifact.
 
@@ -1065,7 +1065,7 @@ Steps:
 
 ---
 
-## Phase 11 — Testing, Fitness Functions & Launch Readiness
+## Phase 11 — Testing, Fitness Functions & Launch Readiness ⬜ PENDING
 
 **Goal**: Operationalize the architecture's "fitness functions" (architecture.md §15) into automated, repeatable checks — the project's definition of "actually done," not just "code exists."
 
