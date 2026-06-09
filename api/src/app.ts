@@ -38,6 +38,9 @@ import { createCmsService } from './modules/cms/cms.service';
 import { createEventRepository } from './modules/events/events.repository';
 import { createEventRouter } from './modules/events/events.router';
 import { createEventService } from './modules/events/events.service';
+import { createMediaRepository } from './modules/media/media.repository';
+import { createMediaRouter } from './modules/media/media.router';
+import { createMediaService } from './modules/media/media.service';
 import { createRegistrationRepository } from './modules/registrations/registrations.repository';
 import { createRegistrationRouter } from './modules/registrations/registrations.router';
 import { createRegistrationService } from './modules/registrations/registrations.service';
@@ -282,8 +285,26 @@ export function createApp(options: CreateAppOptions = {}) {
   // `requireRole`/`requireAuth` gates) to `createBlogRouter` — mirroring the
   // exact "inject dependencies, don't reach for module-level singletons"
   // posture the auth module established.
+  // ---------------------------------------------------------------------------
+  // Media repository constructed early — it is injected into BlogService and
+  // EventService so their `deletePost`/`deleteEvent` methods can cascade-delete
+  // associated MediaAsset rows and on-disk files (ADR-0005 application-layer
+  // cascade; no DB-level FK exists). The mediaService is fully wired below once
+  // blogRepository and eventRepository are available.
+  const mediaRepository = createMediaRepository({ db });
+
   const blogRepository = createBlogRepository({ db });
-  const blogService = createBlogService({ repository: blogRepository });
+  const eventRepository = createEventRepository({ db });
+
+  // MediaService is constructed after both blog and event repositories exist
+  // so it can hold references to them for the ownerId existence+ownership check.
+  const mediaService = createMediaService({
+    repository: mediaRepository,
+    blogRepository,
+    eventRepository,
+  });
+
+  const blogService = createBlogService({ repository: blogRepository, mediaService });
   router.use(createBlogRouter({ authService, blogService }));
 
   // ---------------------------------------------------------------------------
@@ -298,8 +319,7 @@ export function createApp(options: CreateAppOptions = {}) {
   // `modules/events/events.service.ts`'s extensive doc-comment) that Phase
   // 4c's `RegistrationService` will receive via the identical DI pattern
   // once that module exists.
-  const eventRepository = createEventRepository({ db });
-  const eventService = createEventService({ repository: eventRepository });
+  const eventService = createEventService({ repository: eventRepository, mediaService });
   router.use(createEventRouter({ authService, eventService }));
 
   // ---------------------------------------------------------------------------
@@ -348,6 +368,20 @@ export function createApp(options: CreateAppOptions = {}) {
   const cmsRepository = createCmsRepository({ db });
   const cmsService = createCmsService({ repository: cmsRepository });
   router.use(createCmsRouter({ authService, cmsService }));
+
+  // ---------------------------------------------------------------------------
+  // Media module (plan.md Phase 4e) — depends on Blog + Events (as owner types
+  // for the ownerId existence+ownership check — see ADR-0005 and the Media
+  // module's file-header). Mounted after Blog/Events/Registrations/CMS because
+  // its `mediaService` is already constructed above (injected into blogService
+  // and eventService for cascade-delete). The router is the final wiring step:
+  // all three routes (`POST`, `GET`, `DELETE /admin/media`) are gated by
+  // `requireRole(authService, 'ADMIN', 'BLOGGER', 'EVENT_MANAGER')` at the
+  // route level; per-content-area scoping is enforced in the service layer (see
+  // `media.service.ts`'s `checkOwnerAccess` and `media.router.ts`'s file-header
+  // "why not gate by ownerType at the router level" note).
+  // ---------------------------------------------------------------------------
+  router.use(createMediaRouter({ authService, mediaService }));
 
   // Test-only seam (see `CreateAppOptions` doc comment above) — registered before
   // the catch-all 404 handler so probe routes are actually reachable. Runs AFTER
