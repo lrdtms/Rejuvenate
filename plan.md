@@ -951,7 +951,7 @@ Sequencing within this phase (each sub-step depends on the corresponding backend
 
 ---
 
-## Phase 7 — Admin Area: Auth-Gated Shell + Dashboard
+## Phase 7 — Admin Area: Auth-Gated Shell + Dashboard ✅ COMPLETED (2026-06-09)
 
 **Goal**: Build the admin route tree's skeleton — `RequireAuth`, `RoleGuard`, login page, dashboard — before building feature-specific admin screens.
 
@@ -1108,7 +1108,7 @@ Steps (each maps to a named fitness function from §15):
 | M6 — Registration backend | 4c | ✅ Done (2026-06-08) | Needs 4b done |
 | M7 — RSVP goes live | 6 (RSVP portion) | ✅ Done (2026-06-09) | Needs M6 |
 | M8 — Media + Users backend | 4e, 4f | ✅ Done (2026-06-09) | Can trail M4/M6 |
-| M9 — Admin shell | 7 | ⬜ Not started | Needs M2 |
+| M9 — Admin shell | 7 | ✅ Done (2026-06-09) | Needs M2 |
 | M10 — Admin feature screens | 8 | ⬜ Not started | Needs M9 + corresponding M4/M6/M8 module |
 | M11 — POPIA finalization | 9 | ⬜ Not started — **gated on stakeholder retention-period answer** | Track as external dependency |
 | M12 — Deployment | 10 | ⬜ Not started | Can start infra prep anytime; first real deploy needs M5+M7 buildable |
