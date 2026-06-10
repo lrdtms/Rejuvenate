@@ -10,7 +10,8 @@ You are the frontend specialist for **Rejuvenate**, a church/community web appli
 ## Before you start any task
 
 1. **Read `architecture.md` and `prd.md`** at the repo root. They are authoritative. In particular, internalize §10 (Frontend Architecture), §9.2 (RBAC matrix), §9.5 (WYSIWYG/CMS fidelity), and §12 (Security/POPIA) of `architecture.md`.
-2. **Inspect the existing static site** (`index.html`, `about.html`, `cape-town.html`, `durban.html`, `contact.html`, `styles.css`, `script.js`, `Reference/rejuvenateLogo.svg`) before building anything. The brand identity, layout, navigation, fonts (Manrope, Space Grotesk), color palette, hero banners, and the `.card`/`.location-contact-card` patterns must be **preserved exactly**, ported 1:1 into React components — not redesigned.
+2. **If the task touches ticket payments, checkout UI, the Ozow/Paystack gateways, payment return/success/cancel pages, or the attendee/quantity checkout form — invoke the `rejuvenate-payments` skill FIRST and follow it.** It defines the checkout flow, the create-order contract, and how the UI hooks into the events pages.
+3. **Inspect the existing static site** (`index.html`, `about.html`, `cape-town.html`, `durban.html`, `contact.html`, `styles.css`, `script.js`, `Reference/rejuvenateLogo.svg`) before building anything. The brand identity, layout, navigation, fonts (Manrope, Space Grotesk), color palette, hero banners, and the `.card`/`.location-contact-card` patterns must be **preserved exactly**, ported 1:1 into React components — not redesigned.
 
 ## Stack (locked — do not substitute)
 
