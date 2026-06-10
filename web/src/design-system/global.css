@@ -28,6 +28,32 @@ body.page-home {
   background: #000;
 }
 
+/*
+ * Sticky-footer layout shell.
+ * .app-shell is the flex column wrapper rendered by Layout.tsx, containing
+ * Header + the active page's <main> + Footer. The page <main> grows to fill
+ * any remaining viewport height so the footer is pinned to the bottom on
+ * short-content pages, while still flowing below content that overflows.
+ */
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-shell > .site-header,
+.app-shell > .site-footer {
+  flex-shrink: 0;
+}
+
+.app-shell > main {
+  flex: 1 0 auto;
+}
+
 /* ── Inner page shell ───────────────────────────────────────────────── */
 .inner-page {
   padding: clamp(1rem, 2.3vw, 2rem) clamp(1rem, 4vw, 6rem) 3rem;

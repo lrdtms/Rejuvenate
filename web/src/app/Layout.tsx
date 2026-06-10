@@ -8,10 +8,10 @@ import { Footer } from '@/design-system/Footer';
 
 export function Layout() {
   return (
-    <>
+    <div className="app-shell">
       <Header />
       <Outlet />
       <Footer />
-    </>
+    </div>
   );
 }
